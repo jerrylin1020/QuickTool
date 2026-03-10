@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuickTool</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">QuickTool</span>
+      </div>
+      <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">&#9776;</button>
+    </div>
+
+    <div class="search-box">
+      <input type="text" id="toolSearch" placeholder="Search tools..." autocomplete="off" />
+    </div>
+
+    <nav class="tool-nav" id="toolNav">
+      <!-- Populated by JS -->
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">🌙</button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main" id="main">
+    <div class="tool-panel" id="toolPanel">
+      <!-- Home / welcome screen -->
+      <div class="welcome" id="welcomeScreen">
+        <div class="welcome-icon">⚡</div>
+        <h1>QuickTool</h1>
+        <p>A collection of handy developer utilities.<br/>Pick a tool from the sidebar to get started.</p>
+        <div class="tool-grid" id="toolGrid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Tool view -->
+      <div class="tool-view hidden" id="toolView">
+        <div class="tool-header">
+          <button class="back-btn" id="backBtn">&#8592; Back</button>
+          <div>
+            <h2 id="toolTitle"></h2>
+            <p class="tool-desc" id="toolDesc"></p>
+          </div>
+        </div>
+        <div class="tool-body" id="toolBody">
+          <!-- Tool UI injected here -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="tools.js"></script>
+</body>
+</html>
