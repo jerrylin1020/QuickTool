@@ -128,6 +128,105 @@ const TOOLS = [
     render: renderListCompare,
     init: initListCompare,
   },
+  {
+    id: 'jwt-decoder',
+    name: 'JWT Decoder',
+    icon: '🔑',
+    category: 'Security',
+    desc: 'Decode and inspect JWT tokens (header, payload, signature)',
+    render: renderJwtDecoder,
+    init: initJwtDecoder,
+  },
+  {
+    id: 'uuid-generator',
+    name: 'UUID Generator',
+    icon: '🆔',
+    category: 'Generator',
+    desc: 'Generate UUIDs v4 in bulk',
+    render: renderUuidGenerator,
+    init: initUuidGenerator,
+  },
+  {
+    id: 'password-generator',
+    name: 'Password Generator',
+    icon: '🔒',
+    category: 'Generator',
+    desc: 'Generate secure random passwords',
+    render: renderPasswordGenerator,
+    init: initPasswordGenerator,
+  },
+  {
+    id: 'lorem-ipsum',
+    name: 'Lorem Ipsum Generator',
+    icon: '📄',
+    category: 'Generator',
+    desc: 'Generate placeholder lorem ipsum text',
+    render: renderLoremIpsum,
+    init: initLoremIpsum,
+  },
+  {
+    id: 'qr-generator',
+    name: 'QR Code Generator',
+    icon: '▦',
+    category: 'Generator',
+    desc: 'Generate QR codes from any text or URL',
+    render: renderQrGenerator,
+    init: initQrGenerator,
+  },
+  {
+    id: 'line-sorter',
+    name: 'Line Sorter',
+    icon: '↕',
+    category: 'Text',
+    desc: 'Sort, deduplicate, reverse or shuffle lines',
+    render: renderLineSorter,
+    init: initLineSorter,
+  },
+  {
+    id: 'html-entity',
+    name: 'HTML Entity Codec',
+    icon: '&',
+    category: 'Encode',
+    desc: 'Encode and decode HTML entities',
+    render: renderHtmlEntity,
+    init: initHtmlEntity,
+  },
+  {
+    id: 'text-escape',
+    name: 'Text Escape / Unescape',
+    icon: '\\',
+    category: 'Text',
+    desc: 'Escape or unescape JSON strings, newlines, special chars',
+    render: renderTextEscape,
+    init: initTextEscape,
+  },
+  {
+    id: 'csv-json',
+    name: 'CSV ↔ JSON',
+    icon: '⇄',
+    category: 'Data',
+    desc: 'Convert between CSV and JSON formats',
+    render: renderCsvJson,
+    init: initCsvJson,
+  },
+  {
+    id: 'yaml-json',
+    name: 'YAML ↔ JSON',
+    icon: '⇄',
+    category: 'Data',
+    desc: 'Convert between YAML and JSON formats',
+    render: renderYamlJson,
+    init: initYamlJson,
+  },
+  {
+    id: 'cron-parser',
+    name: 'Cron Parser',
+    icon: '⏱',
+    category: 'Data',
+    desc: 'Explain cron expressions in plain language',
+    render: renderCronParser,
+    init: initCronParser,
+  },
 ];
 
 // =====================
@@ -146,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSidebar();
 
   document.getElementById('backBtn').addEventListener('click', showHome);
+  document.getElementById('logoHome').addEventListener('click', showHome);
 });
 
 // =====================
@@ -278,14 +378,7 @@ function setupSidebar() {
 // Utility helpers
 // =====================
 function copyToClipboard(text) {
-  navigator.clipboard.writeText(text).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-  });
+  navigator.clipboard.writeText(text).catch(() => {});
   showCopyFeedback();
 }
 
@@ -671,7 +764,7 @@ function initBase64Codec() {
 
   document.getElementById('b64-encode').addEventListener('click', () => {
     try {
-      output.value = btoa(unescape(encodeURIComponent(input.value)));
+      output.value = btoa(String.fromCharCode(...new TextEncoder().encode(input.value)));
       statusEl.innerHTML = '<div class="status-bar success">✓ Encoded to Base64</div>';
     } catch (e) {
       statusEl.innerHTML = `<div class="status-bar error">✗ ${e.message}</div>`;
@@ -680,7 +773,7 @@ function initBase64Codec() {
 
   document.getElementById('b64-decode').addEventListener('click', () => {
     try {
-      output.value = decodeURIComponent(escape(atob(input.value.trim())));
+      output.value = new TextDecoder().decode(Uint8Array.from(atob(input.value.trim()), c => c.charCodeAt(0)));
       statusEl.innerHTML = '<div class="status-bar success">✓ Decoded from Base64</div>';
     } catch (e) {
       statusEl.innerHTML = `<div class="status-bar error">✗ Invalid Base64: ${e.message}</div>`;
@@ -956,9 +1049,8 @@ function initRegexTester() {
       return;
     }
 
-    let regex;
     try {
-      regex = new RegExp(pattern, flags);
+      new RegExp(pattern, flags);
       statusEl.innerHTML = '<div class="status-bar success">✓ Valid regex</div>';
     } catch (e) {
       statusEl.innerHTML = `<div class="status-bar error">✗ ${e.message}</div>`;
@@ -1371,7 +1463,7 @@ function initListCompare() {
 
     // Build original-value maps (key → original display value, first occurrence wins)
     const origA = new Map();
-    parseList(rawA, trim, ignoreEmpty, true).forEach((orig, i) => {
+    parseList(rawA, trim, ignoreEmpty, true).forEach((orig) => {
       const key = caseSensitive ? orig : orig.toLowerCase();
       if (!origA.has(key)) origA.set(key, orig);
     });
@@ -1421,4 +1513,827 @@ function initListCompare() {
       }
     });
   });
+}
+
+// =====================
+// 14. JWT Decoder
+// =====================
+function renderJwtDecoder() {
+  return `
+    <div class="card">
+      <label class="field-label">JWT Token</label>
+      <textarea class="mono" id="jwt-input" rows="5" placeholder="Paste your JWT token here..."></textarea>
+      <div class="btn-group" style="margin:12px 0">
+        <button class="btn" id="jwt-decode">Decode</button>
+        <button class="btn btn-ghost" id="jwt-clear">Clear</button>
+      </div>
+      <div id="jwt-status"></div>
+      <div id="jwt-result"></div>
+    </div>
+  `;
+}
+
+function initJwtDecoder() {
+  function b64url(str) {
+    str = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (str.length % 4) str += '=';
+    return new TextDecoder().decode(Uint8Array.from(atob(str), c => c.charCodeAt(0)));
+  }
+
+  function decode() {
+    const token = document.getElementById('jwt-input').value.trim();
+    const statusEl = document.getElementById('jwt-status');
+    const resultEl = document.getElementById('jwt-result');
+
+    if (!token) { resultEl.innerHTML = ''; statusEl.innerHTML = ''; return; }
+
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      statusEl.innerHTML = '<div class="status-bar error">✗ Invalid JWT — must have 3 parts separated by dots</div>';
+      resultEl.innerHTML = '';
+      return;
+    }
+
+    try {
+      const header  = JSON.parse(b64url(parts[0]));
+      const payload = JSON.parse(b64url(parts[1]));
+      const sig     = parts[2];
+
+      const now = Math.floor(Date.now() / 1000);
+      const expired = payload.exp && payload.exp < now;
+      const expStr  = payload.exp ? new Date(payload.exp * 1000).toLocaleString() : '—';
+      const iatStr  = payload.iat ? new Date(payload.iat * 1000).toLocaleString() : '—';
+
+      statusEl.innerHTML = expired
+        ? '<div class="status-bar error">⚠ Token is EXPIRED</div>'
+        : payload.exp
+          ? '<div class="status-bar success">✓ Token is valid (not expired)</div>'
+          : '<div class="status-bar info">ℹ No expiration claim</div>';
+
+      const block = (title, color, obj) => `
+        <div class="card" style="margin:0;border-left:3px solid ${color}">
+          <div class="card-title" style="color:${color};margin-bottom:8px">${title}</div>
+          <pre style="font-family:var(--mono);font-size:13px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0">${escapeHtml(JSON.stringify(obj, null, 2))}</pre>
+        </div>`;
+
+      resultEl.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:4px">
+          ${block('Header', '#7c3aed', header)}
+          ${block('Payload', '#0284c7', payload)}
+          <div class="card" style="margin:0;border-left:3px solid #6b7280">
+            <div class="card-title" style="color:var(--text-muted);margin-bottom:8px">Signature (raw)</div>
+            <div class="mono" style="font-size:12px;word-break:break-all;color:var(--text-muted)">${escapeHtml(sig)}</div>
+          </div>
+          ${payload.exp || payload.iat ? `
+          <div class="stat-row">
+            ${payload.iat ? `<div class="stat-chip">Issued at: <span>${iatStr}</span></div>` : ''}
+            ${payload.exp ? `<div class="stat-chip">Expires: <span style="color:${expired?'#dc2626':'inherit'}">${expStr}</span></div>` : ''}
+          </div>` : ''}
+        </div>`;
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">✗ Failed to decode: ${e.message}</div>`;
+    }
+  }
+
+  document.getElementById('jwt-decode').addEventListener('click', decode);
+  document.getElementById('jwt-input').addEventListener('input', decode);
+  document.getElementById('jwt-clear').addEventListener('click', () => {
+    document.getElementById('jwt-input').value = '';
+    document.getElementById('jwt-result').innerHTML = '';
+    document.getElementById('jwt-status').innerHTML = '';
+  });
+}
+
+// =====================
+// 15. UUID Generator
+// =====================
+function renderUuidGenerator() {
+  return `
+    <div class="card">
+      <div class="row" style="align-items:flex-end">
+        <div style="width:120px">
+          <label class="field-label">Count</label>
+          <input type="number" id="uuid-count" value="5" min="1" max="100" />
+        </div>
+        <div style="width:120px">
+          <label class="field-label">Format</label>
+          <select id="uuid-fmt">
+            <option value="lower">lowercase</option>
+            <option value="upper">UPPERCASE</option>
+            <option value="nohyphen">No hyphens</option>
+          </select>
+        </div>
+        <button class="btn" id="uuid-gen">Generate</button>
+        <button class="btn btn-ghost" id="uuid-copy-all">Copy All</button>
+      </div>
+      <div style="margin-top:14px;position:relative">
+        <textarea class="mono" id="uuid-output" rows="10" readonly placeholder="UUIDs will appear here..."></textarea>
+      </div>
+    </div>
+  `;
+}
+
+function initUuidGenerator() {
+  function genUuid() {
+    return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+  }
+
+  function generate() {
+    const count = Math.min(100, Math.max(1, parseInt(document.getElementById('uuid-count').value) || 1));
+    const fmt = document.getElementById('uuid-fmt').value;
+    const uuids = Array.from({length: count}, () => {
+      let u = genUuid();
+      if (fmt === 'upper') u = u.toUpperCase();
+      if (fmt === 'nohyphen') u = u.replace(/-/g, '');
+      return u;
+    });
+    document.getElementById('uuid-output').value = uuids.join('\n');
+  }
+
+  document.getElementById('uuid-gen').addEventListener('click', generate);
+  document.getElementById('uuid-copy-all').addEventListener('click', () => {
+    const val = document.getElementById('uuid-output').value;
+    if (val) copyToClipboard(val);
+  });
+  generate();
+}
+
+// =====================
+// 16. Password Generator
+// =====================
+function renderPasswordGenerator() {
+  return `
+    <div class="card">
+      <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+        <div style="width:120px">
+          <label class="field-label">Length</label>
+          <input type="number" id="pw-len" value="20" min="4" max="128" />
+        </div>
+        <div style="width:100px">
+          <label class="field-label">Count</label>
+          <input type="number" id="pw-count" value="5" min="1" max="50" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:14px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="pw-upper" checked /> Uppercase (A-Z)</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="pw-lower" checked /> Lowercase (a-z)</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="pw-num" checked /> Numbers (0-9)</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="pw-sym" checked /> Symbols (!@#...)</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="pw-ambig" /> Exclude ambiguous (0O1lI)</label>
+      </div>
+      <div class="btn-group" style="margin:12px 0">
+        <button class="btn" id="pw-gen">Generate</button>
+        <button class="btn btn-ghost" id="pw-copy-all">Copy All</button>
+      </div>
+      <div id="pw-status"></div>
+      <textarea class="mono" id="pw-output" rows="8" readonly placeholder="Passwords will appear here..."></textarea>
+    </div>
+  `;
+}
+
+function initPasswordGenerator() {
+  const UPPER  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const LOWER  = 'abcdefghijklmnopqrstuvwxyz';
+  const NUM    = '0123456789';
+  const SYM    = '!@#$%^&*()-_=+[]{}|;:,.<>?';
+  const AMBIG  = /[0O1lI]/g;
+
+  function generate() {
+    const len   = Math.min(128, Math.max(4, parseInt(document.getElementById('pw-len').value) || 20));
+    const count = Math.min(50, Math.max(1, parseInt(document.getElementById('pw-count').value) || 5));
+    const useUp  = document.getElementById('pw-upper').checked;
+    const useLo  = document.getElementById('pw-lower').checked;
+    const useNum = document.getElementById('pw-num').checked;
+    const useSym = document.getElementById('pw-sym').checked;
+    const noAmb  = document.getElementById('pw-ambig').checked;
+    const statusEl = document.getElementById('pw-status');
+
+    let charset = '';
+    if (useUp)  charset += UPPER;
+    if (useLo)  charset += LOWER;
+    if (useNum) charset += NUM;
+    if (useSym) charset += SYM;
+    if (noAmb)  charset = charset.replace(AMBIG, '');
+
+    if (!charset) {
+      statusEl.innerHTML = '<div class="status-bar error">Select at least one character type</div>';
+      return;
+    }
+    statusEl.innerHTML = '';
+
+    const arr = new Uint32Array(len);
+    const passwords = Array.from({length: count}, () => {
+      crypto.getRandomValues(arr);
+      return Array.from(arr, n => charset[n % charset.length]).join('');
+    });
+    document.getElementById('pw-output').value = passwords.join('\n');
+  }
+
+  document.getElementById('pw-gen').addEventListener('click', generate);
+  document.getElementById('pw-copy-all').addEventListener('click', () => {
+    const val = document.getElementById('pw-output').value;
+    if (val) copyToClipboard(val);
+  });
+  generate();
+}
+
+// =====================
+// 17. Lorem Ipsum Generator
+// =====================
+function renderLoremIpsum() {
+  return `
+    <div class="card">
+      <div class="row" style="align-items:flex-end;flex-wrap:wrap">
+        <div>
+          <label class="field-label">Type</label>
+          <select id="li-type">
+            <option value="paragraphs">Paragraphs</option>
+            <option value="sentences">Sentences</option>
+            <option value="words">Words</option>
+          </select>
+        </div>
+        <div style="width:100px">
+          <label class="field-label">Count</label>
+          <input type="number" id="li-count" value="3" min="1" max="50" />
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-top:20px">
+          <input type="checkbox" id="li-classic" checked /> Start with "Lorem ipsum..."
+        </label>
+        <button class="btn" id="li-gen">Generate</button>
+      </div>
+      <div style="margin-top:14px;position:relative">
+        <textarea id="li-output" rows="12" readonly placeholder="Lorem ipsum text will appear here..."></textarea>
+        <button class="btn btn-sm" id="li-copy" style="position:absolute;top:8px;right:8px;opacity:0.85">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
+function initLoremIpsum() {
+  const WORDS = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id est laborum'.split(' ');
+  const CLASSIC = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.';
+
+  function rnd(n) { return Math.floor(Math.random() * n); }
+
+  function sentence() {
+    const len = 8 + rnd(12);
+    const words = Array.from({length: len}, () => WORDS[rnd(WORDS.length)]);
+    words[0] = words[0][0].toUpperCase() + words[0].slice(1);
+    return words.join(' ') + '.';
+  }
+
+  function paragraph() {
+    return Array.from({length: 4 + rnd(4)}, () => sentence()).join(' ');
+  }
+
+  function generate() {
+    const type    = document.getElementById('li-type').value;
+    const count   = Math.min(50, Math.max(1, parseInt(document.getElementById('li-count').value) || 3));
+    const classic = document.getElementById('li-classic').checked;
+    let result = [];
+
+    if (type === 'words') {
+      const words = Array.from({length: count}, () => WORDS[rnd(WORDS.length)]);
+      result = [words.join(' ')];
+    } else if (type === 'sentences') {
+      result = Array.from({length: count}, () => sentence());
+      if (classic && result.length > 0) result[0] = CLASSIC;
+    } else {
+      result = Array.from({length: count}, () => paragraph());
+      if (classic && result.length > 0) result[0] = CLASSIC + ' ' + result[0].split('. ').slice(1).join('. ');
+    }
+
+    document.getElementById('li-output').value = result.join('\n\n');
+  }
+
+  document.getElementById('li-gen').addEventListener('click', generate);
+  document.getElementById('li-copy').addEventListener('click', () => {
+    const val = document.getElementById('li-output').value;
+    if (val) copyToClipboard(val);
+  });
+  generate();
+}
+
+// =====================
+// 18. QR Code Generator
+// =====================
+function renderQrGenerator() {
+  return `
+    <div class="card">
+      <label class="field-label">Text or URL</label>
+      <textarea id="qr-input" rows="4" placeholder="Enter text or URL to encode..."></textarea>
+      <div class="row" style="margin-top:12px;align-items:flex-end">
+        <div style="width:130px">
+          <label class="field-label">Error Correction</label>
+          <select id="qr-ec">
+            <option value="L">L (7%)</option>
+            <option value="M" selected>M (15%)</option>
+            <option value="Q">Q (25%)</option>
+            <option value="H">H (30%)</option>
+          </select>
+        </div>
+        <div style="width:100px">
+          <label class="field-label">Size (px)</label>
+          <input type="number" id="qr-size" value="256" min="64" max="1024" step="32" />
+        </div>
+        <button class="btn" id="qr-gen">Generate</button>
+        <button class="btn btn-ghost" id="qr-download">Download PNG</button>
+      </div>
+      <div id="qr-status" style="margin-top:8px"></div>
+      <div id="qr-output" style="margin-top:16px;text-align:center"></div>
+    </div>
+  `;
+}
+
+function initQrGenerator() {
+  let canvas = null;
+
+  function generate() {
+    const text = document.getElementById('qr-input').value.trim();
+    const statusEl = document.getElementById('qr-status');
+    const outputEl = document.getElementById('qr-output');
+    if (!text) { outputEl.innerHTML = ''; statusEl.innerHTML = ''; return; }
+
+    if (typeof QRCode === 'undefined') {
+      statusEl.innerHTML = '<div class="status-bar error">QR library not loaded — check internet connection</div>';
+      return;
+    }
+
+    const size = Math.min(1024, Math.max(64, parseInt(document.getElementById('qr-size').value) || 256));
+    const ec = document.getElementById('qr-ec').value;
+
+    canvas = document.createElement('canvas');
+    QRCode.toCanvas(canvas, text, { width: size, errorCorrectionLevel: ec, margin: 2 }, err => {
+      if (err) {
+        statusEl.innerHTML = `<div class="status-bar error">✗ ${err.message}</div>`;
+        return;
+      }
+      statusEl.innerHTML = '<div class="status-bar success">✓ QR code generated</div>';
+      outputEl.innerHTML = '';
+      canvas.style.borderRadius = 'var(--radius)';
+      canvas.style.border = '1px solid var(--border)';
+      outputEl.appendChild(canvas);
+    });
+  }
+
+  document.getElementById('qr-gen').addEventListener('click', generate);
+  document.getElementById('qr-input').addEventListener('input', generate);
+
+  document.getElementById('qr-download').addEventListener('click', () => {
+    if (!canvas) return;
+    const a = document.createElement('a');
+    a.download = 'qrcode.png';
+    a.href = canvas.toDataURL();
+    a.click();
+  });
+}
+
+// =====================
+// 19. Line Sorter
+// =====================
+function renderLineSorter() {
+  return `
+    <div class="card">
+      <label class="field-label">Input (one item per line)</label>
+      <textarea id="ls-input" rows="10" placeholder="Paste lines here..."></textarea>
+      <div class="row" style="margin-top:12px;align-items:center;flex-wrap:wrap">
+        <div class="btn-group">
+          <button class="btn" id="ls-asc">A → Z</button>
+          <button class="btn btn-ghost" id="ls-desc">Z → A</button>
+          <button class="btn btn-ghost" id="ls-reverse">Reverse</button>
+          <button class="btn btn-ghost" id="ls-shuffle">Shuffle</button>
+          <button class="btn btn-ghost" id="ls-dedup">Deduplicate</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="ls-case" /> Case-sensitive sort
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="ls-trim" checked /> Trim whitespace
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="ls-empty" checked /> Remove empty lines
+        </label>
+      </div>
+      <div style="margin-top:12px;position:relative">
+        <label class="field-label">Output</label>
+        <textarea id="ls-output" rows="10" readonly placeholder="Result will appear here..."></textarea>
+        <button class="btn btn-sm" id="ls-copy" style="position:absolute;top:24px;right:8px;opacity:0.85">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
+function initLineSorter() {
+  function getLines() {
+    let lines = document.getElementById('ls-input').value.split('\n');
+    if (document.getElementById('ls-trim').checked) lines = lines.map(l => l.trim());
+    if (document.getElementById('ls-empty').checked) lines = lines.filter(l => l !== '');
+    return lines;
+  }
+  function setOutput(lines) {
+    document.getElementById('ls-output').value = lines.join('\n');
+  }
+
+  document.getElementById('ls-asc').addEventListener('click', () => {
+    const cs = document.getElementById('ls-case').checked;
+    setOutput(getLines().sort((a, b) => cs ? a.localeCompare(b) : a.toLowerCase().localeCompare(b.toLowerCase())));
+  });
+  document.getElementById('ls-desc').addEventListener('click', () => {
+    const cs = document.getElementById('ls-case').checked;
+    setOutput(getLines().sort((a, b) => cs ? b.localeCompare(a) : b.toLowerCase().localeCompare(a.toLowerCase())));
+  });
+  document.getElementById('ls-reverse').addEventListener('click', () => setOutput(getLines().reverse()));
+  document.getElementById('ls-shuffle').addEventListener('click', () => {
+    const lines = getLines();
+    for (let i = lines.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [lines[i], lines[j]] = [lines[j], lines[i]];
+    }
+    setOutput(lines);
+  });
+  document.getElementById('ls-dedup').addEventListener('click', () => {
+    const cs = document.getElementById('ls-case').checked;
+    const seen = new Set();
+    setOutput(getLines().filter(l => {
+      const key = cs ? l : l.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }));
+  });
+  document.getElementById('ls-copy').addEventListener('click', () => {
+    const val = document.getElementById('ls-output').value;
+    if (val) copyToClipboard(val);
+  });
+}
+
+// =====================
+// 20. HTML Entity Codec
+// =====================
+function renderHtmlEntity() {
+  return `
+    <div class="card">
+      <label class="field-label">Input</label>
+      <textarea class="mono" id="he-input" rows="8" placeholder="Enter text or HTML..."></textarea>
+      <div class="btn-group" style="margin:12px 0">
+        <button class="btn" id="he-encode">Encode</button>
+        <button class="btn btn-ghost" id="he-decode">Decode</button>
+        <button class="btn btn-ghost" id="he-clear">Clear</button>
+      </div>
+      <label class="field-label">Output</label>
+      <div style="position:relative">
+        <textarea class="mono" id="he-output" rows="8" readonly placeholder="Result will appear here..."></textarea>
+        <button class="btn btn-sm" id="he-copy" style="position:absolute;top:8px;right:8px;opacity:0.85">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
+function initHtmlEntity() {
+  const input = document.getElementById('he-input');
+  const output = document.getElementById('he-output');
+
+  document.getElementById('he-encode').addEventListener('click', () => {
+    const d = document.createElement('div');
+    d.textContent = input.value;
+    output.value = d.innerHTML;
+  });
+  document.getElementById('he-decode').addEventListener('click', () => {
+    const d = document.createElement('div');
+    d.innerHTML = input.value;
+    output.value = d.textContent;
+  });
+  document.getElementById('he-clear').addEventListener('click', () => { input.value = ''; output.value = ''; });
+  document.getElementById('he-copy').addEventListener('click', () => { if (output.value) copyToClipboard(output.value); });
+}
+
+// =====================
+// 21. Text Escape / Unescape
+// =====================
+function renderTextEscape() {
+  return `
+    <div class="card">
+      <label class="field-label">Input</label>
+      <textarea class="mono" id="te-input" rows="8" placeholder='e.g. Hello\nWorld\t"quoted"'></textarea>
+      <div class="row" style="margin-top:10px;align-items:flex-end">
+        <div>
+          <label class="field-label">Mode</label>
+          <select id="te-mode">
+            <option value="json">JSON string</option>
+            <option value="regex">Regex</option>
+            <option value="newline">Literal newlines ↔ \\n</option>
+          </select>
+        </div>
+        <div class="btn-group">
+          <button class="btn" id="te-escape">Escape</button>
+          <button class="btn btn-ghost" id="te-unescape">Unescape</button>
+          <button class="btn btn-ghost" id="te-clear">Clear</button>
+        </div>
+      </div>
+      <div id="te-status" style="margin-top:8px"></div>
+      <label class="field-label" style="margin-top:12px">Output</label>
+      <div style="position:relative">
+        <textarea class="mono" id="te-output" rows="8" readonly></textarea>
+        <button class="btn btn-sm" id="te-copy" style="position:absolute;top:8px;right:8px;opacity:0.85">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
+function initTextEscape() {
+  const input = document.getElementById('te-input');
+  const output = document.getElementById('te-output');
+  const statusEl = document.getElementById('te-status');
+
+  function run(direction) {
+    const mode = document.getElementById('te-mode').value;
+    const text = input.value;
+    try {
+      if (mode === 'json') {
+        if (direction === 'escape') {
+          output.value = JSON.stringify(text).slice(1, -1);
+        } else {
+          output.value = JSON.parse('"' + text.replace(/"/g, '\\"') + '"');
+        }
+      } else if (mode === 'regex') {
+        if (direction === 'escape') {
+          output.value = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        } else {
+          output.value = text.replace(/\\([.*+?^${}()|[\]\\])/g, '$1');
+        }
+      } else {
+        if (direction === 'escape') {
+          output.value = text.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+        } else {
+          output.value = text.replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t');
+        }
+      }
+      statusEl.innerHTML = '';
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">✗ ${e.message}</div>`;
+    }
+  }
+
+  document.getElementById('te-escape').addEventListener('click', () => run('escape'));
+  document.getElementById('te-unescape').addEventListener('click', () => run('unescape'));
+  document.getElementById('te-clear').addEventListener('click', () => { input.value = ''; output.value = ''; statusEl.innerHTML = ''; });
+  document.getElementById('te-copy').addEventListener('click', () => { if (output.value) copyToClipboard(output.value); });
+}
+
+// =====================
+// 22. CSV ↔ JSON
+// =====================
+function renderCsvJson() {
+  return `
+    <div class="card">
+      <div class="split-pane">
+        <div>
+          <label class="field-label">CSV</label>
+          <textarea class="mono" id="cj-csv" rows="14" placeholder="name,age,city&#10;Alice,30,Taipei&#10;Bob,25,Tokyo"></textarea>
+        </div>
+        <div>
+          <label class="field-label">JSON</label>
+          <textarea class="mono" id="cj-json" rows="14" placeholder='[{"name":"Alice","age":"30",...}]'></textarea>
+        </div>
+      </div>
+      <div class="btn-group" style="margin-top:12px">
+        <button class="btn" id="cj-to-json">CSV → JSON</button>
+        <button class="btn btn-ghost" id="cj-to-csv">JSON → CSV</button>
+        <button class="btn btn-ghost" id="cj-clear">Clear</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="cj-pretty" checked /> Pretty JSON
+        </label>
+      </div>
+      <div id="cj-status" style="margin-top:8px"></div>
+    </div>
+  `;
+}
+
+function initCsvJson() {
+  function parseCsv(text) {
+    const lines = text.trim().split('\n');
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    return lines.slice(1).map(line => {
+      const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? '']));
+    });
+  }
+
+  function objToCsvRow(obj, headers) {
+    return headers.map(h => {
+      const v = String(obj[h] ?? '');
+      return v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v;
+    }).join(',');
+  }
+
+  const statusEl = document.getElementById('cj-status');
+
+  document.getElementById('cj-to-json').addEventListener('click', () => {
+    try {
+      const data = parseCsv(document.getElementById('cj-csv').value);
+      const pretty = document.getElementById('cj-pretty').checked;
+      document.getElementById('cj-json').value = JSON.stringify(data, null, pretty ? 2 : 0);
+      statusEl.innerHTML = `<div class="status-bar success">✓ Converted ${data.length} rows to JSON</div>`;
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">✗ ${e.message}</div>`;
+    }
+  });
+
+  document.getElementById('cj-to-csv').addEventListener('click', () => {
+    try {
+      const data = JSON.parse(document.getElementById('cj-json').value);
+      if (!Array.isArray(data)) throw new Error('JSON must be an array of objects');
+      const headers = [...new Set(data.flatMap(obj => Object.keys(obj)))];
+      const rows = [headers.join(','), ...data.map(obj => objToCsvRow(obj, headers))];
+      document.getElementById('cj-csv').value = rows.join('\n');
+      statusEl.innerHTML = `<div class="status-bar success">✓ Converted ${data.length} rows to CSV</div>`;
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">✗ ${e.message}</div>`;
+    }
+  });
+
+  document.getElementById('cj-clear').addEventListener('click', () => {
+    document.getElementById('cj-csv').value = '';
+    document.getElementById('cj-json').value = '';
+    statusEl.innerHTML = '';
+  });
+}
+
+// =====================
+// 23. YAML ↔ JSON
+// =====================
+function renderYamlJson() {
+  return `
+    <div class="card">
+      <div class="split-pane">
+        <div>
+          <label class="field-label">YAML</label>
+          <textarea class="mono" id="yj-yaml" rows="16" placeholder="name: Alice&#10;age: 30&#10;hobbies:&#10;  - coding&#10;  - reading"></textarea>
+        </div>
+        <div>
+          <label class="field-label">JSON</label>
+          <textarea class="mono" id="yj-json" rows="16" placeholder='{"name": "Alice", ...}'></textarea>
+        </div>
+      </div>
+      <div class="btn-group" style="margin-top:12px">
+        <button class="btn" id="yj-to-json">YAML → JSON</button>
+        <button class="btn btn-ghost" id="yj-to-yaml">JSON → YAML</button>
+        <button class="btn btn-ghost" id="yj-clear">Clear</button>
+      </div>
+      <div id="yj-status" style="margin-top:8px"></div>
+    </div>
+  `;
+}
+
+function initYamlJson() {
+  const statusEl = document.getElementById('yj-status');
+
+  document.getElementById('yj-to-json').addEventListener('click', () => {
+    try {
+      if (typeof jsyaml === 'undefined') throw new Error('YAML library not loaded — check internet connection');
+      const obj = jsyaml.load(document.getElementById('yj-yaml').value);
+      document.getElementById('yj-json').value = JSON.stringify(obj, null, 2);
+      statusEl.innerHTML = '<div class="status-bar success">✓ Converted YAML → JSON</div>';
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">✗ ${e.message}</div>`;
+    }
+  });
+
+  document.getElementById('yj-to-yaml').addEventListener('click', () => {
+    try {
+      if (typeof jsyaml === 'undefined') throw new Error('YAML library not loaded — check internet connection');
+      const obj = JSON.parse(document.getElementById('yj-json').value);
+      document.getElementById('yj-yaml').value = jsyaml.dump(obj, {indent: 2});
+      statusEl.innerHTML = '<div class="status-bar success">✓ Converted JSON → YAML</div>';
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">✗ ${e.message}</div>`;
+    }
+  });
+
+  document.getElementById('yj-clear').addEventListener('click', () => {
+    document.getElementById('yj-yaml').value = '';
+    document.getElementById('yj-json').value = '';
+    statusEl.innerHTML = '';
+  });
+}
+
+// =====================
+// 24. Cron Parser
+// =====================
+function renderCronParser() {
+  return `
+    <div class="card">
+      <label class="field-label">Cron Expression</label>
+      <input type="text" class="mono" id="cp-input" placeholder="e.g.  0 9 * * 1-5" value="0 9 * * 1-5" />
+      <div style="margin-top:8px" id="cp-status"></div>
+      <div id="cp-result" style="margin-top:14px"></div>
+      <div style="margin-top:20px">
+        <label class="field-label">Quick Examples</label>
+        <div class="pill-group" id="cp-examples">
+          <button class="pill cp-ex" data-v="* * * * *">Every minute</button>
+          <button class="pill cp-ex" data-v="0 * * * *">Every hour</button>
+          <button class="pill cp-ex" data-v="0 9 * * 1-5">Weekdays 9am</button>
+          <button class="pill cp-ex" data-v="0 0 * * *">Daily midnight</button>
+          <button class="pill cp-ex" data-v="0 0 * * 0">Every Sunday</button>
+          <button class="pill cp-ex" data-v="0 0 1 * *">1st of month</button>
+          <button class="pill cp-ex" data-v="0 0 1 1 *">Every year</button>
+          <button class="pill cp-ex" data-v="*/5 * * * *">Every 5 min</button>
+          <button class="pill cp-ex" data-v="30 18 * * 1,3,5">Mon/Wed/Fri 6:30pm</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function initCronParser() {
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  function describeField(val, type) {
+    if (val === '*') return `every ${type}`;
+    if (val.startsWith('*/')) return `every ${val.slice(2)} ${type}s`;
+    if (val.includes('-')) {
+      const [a, b] = val.split('-');
+      if (type === 'day of week') return `${DAYS[+a]} to ${DAYS[+b]}`;
+      if (type === 'month') return `${MONTHS[+a-1]} to ${MONTHS[+b-1]}`;
+      return `${type} ${a} to ${b}`;
+    }
+    if (val.includes(',')) {
+      const parts = val.split(',');
+      if (type === 'day of week') return parts.map(p => DAYS[+p]).join(', ');
+      if (type === 'month') return parts.map(p => MONTHS[+p-1]).join(', ');
+      return `${type}s ${parts.join(', ')}`;
+    }
+    if (type === 'day of week') return DAYS[+val] ?? val;
+    if (type === 'month') return MONTHS[+val-1] ?? val;
+    return `${type} ${val}`;
+  }
+
+  function parse(expr) {
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length !== 5) throw new Error('Must have exactly 5 fields: minute hour day month weekday');
+    const [min, hr, dom, mon, dow] = parts;
+
+    const sentences = [];
+    sentences.push(`<strong>Minute:</strong> ${describeField(min, 'minute')}`);
+    sentences.push(`<strong>Hour:</strong> ${describeField(hr, 'hour')}`);
+    sentences.push(`<strong>Day of month:</strong> ${describeField(dom, 'day')}`);
+    sentences.push(`<strong>Month:</strong> ${describeField(mon, 'month')}`);
+    sentences.push(`<strong>Day of week:</strong> ${describeField(dow, 'day of week')}`);
+
+    // Human summary
+    let summary = 'Runs ';
+    if (min === '*' && hr === '*') summary += 'every minute';
+    else if (min.startsWith('*/')) summary += `every ${min.slice(2)} minutes`;
+    else if (hr === '*') summary += `at minute ${min} of every hour`;
+    else {
+      const h = hr.includes(',') ? hr.split(',').map(h => {
+        const n = +h; return `${n % 12 || 12}:${String(+min).padStart(2,'0')} ${n < 12 ? 'AM' : 'PM'}`;
+      }).join(' and ') : (() => { const n = +hr; return `${n%12||12}:${String(+min).padStart(2,'0')} ${n<12?'AM':'PM'}`; })();
+      summary += `at ${h}`;
+    }
+    if (dow !== '*') summary += `, on ${describeField(dow, 'day of week')}`;
+    if (dom !== '*') summary += `, on day ${dom} of the month`;
+    if (mon !== '*') summary += `, in ${describeField(mon, 'month')}`;
+
+    return { sentences, summary };
+  }
+
+  function run() {
+    const val = document.getElementById('cp-input').value;
+    const statusEl = document.getElementById('cp-status');
+    const resultEl = document.getElementById('cp-result');
+    if (!val.trim()) { resultEl.innerHTML = ''; statusEl.innerHTML = ''; return; }
+
+    try {
+      const { sentences, summary } = parse(val);
+      statusEl.innerHTML = '<div class="status-bar success">✓ Valid cron expression</div>';
+      resultEl.innerHTML = `
+        <div class="card" style="margin:0 0 12px;border-left:3px solid var(--accent)">
+          <div class="card-title">Plain English</div>
+          <div style="font-size:16px;font-weight:600;color:var(--text)">${summary}</div>
+        </div>
+        <div class="card" style="margin:0">
+          <div class="card-title">Field Breakdown</div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:14px">
+            ${sentences.map(s => `<div style="padding:4px 0;border-bottom:1px solid var(--border)">${s}</div>`).join('')}
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">✗ ${e.message}</div>`;
+      resultEl.innerHTML = '';
+    }
+  }
+
+  document.getElementById('cp-input').addEventListener('input', run);
+  document.querySelectorAll('.cp-ex').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('cp-input').value = btn.dataset.v;
+      run();
+    });
+  });
+  run();
 }
