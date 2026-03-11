@@ -227,6 +227,15 @@ const TOOLS = [
     render: renderCronParser,
     init: initCronParser,
   },
+  {
+    id: 'image-preview',
+    name: 'Bulk Image Preview',
+    icon: '🖼',
+    category: 'Media',
+    desc: 'Preview images from a URL template + variable list',
+    render: renderImagePreview,
+    init: initImagePreview,
+  },
 ];
 
 // =====================
@@ -2336,4 +2345,203 @@ function initCronParser() {
     });
   });
   run();
+}
+
+// =====================
+// 25. Bulk Image Preview
+// =====================
+function renderImagePreview() {
+  return `
+    <div class="card">
+      <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:12px">
+        <div style="flex:1;min-width:260px">
+          <label class="field-label">URL Template <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">— use {variable} as placeholder</span></label>
+          <input type="text" class="mono" id="ip-template" placeholder="https://example.com/images/{variable}.jpg" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px;align-items:flex-end;flex-wrap:wrap;gap:12px">
+        <div style="flex:1;min-width:200px">
+          <label class="field-label">Variable List (one per line)</label>
+          <textarea id="ip-list" rows="6" placeholder="aaa&#10;bbb&#10;ccc"></textarea>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;min-width:160px">
+          <div>
+            <label class="field-label">Columns</label>
+            <select id="ip-cols">
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Image size</label>
+            <select id="ip-size">
+              <option value="100px">Small (100px)</option>
+              <option value="160px" selected>Medium (160px)</option>
+              <option value="240px">Large (240px)</option>
+              <option value="100%">Full width</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="btn-group" style="margin:14px 0">
+        <button class="btn" id="ip-load">Load Images</button>
+        <button class="btn btn-ghost" id="ip-clear">Clear</button>
+      </div>
+      <div id="ip-status"></div>
+      <div id="ip-missing" style="margin-top:12px"></div>
+      <div id="ip-grid" style="margin-top:16px"></div>
+    </div>
+  `;
+}
+
+function initImagePreview() {
+  document.getElementById('ip-load').addEventListener('click', () => {
+    const template = document.getElementById('ip-template').value.trim();
+    const listRaw  = document.getElementById('ip-list').value.trim();
+    const statusEl  = document.getElementById('ip-status');
+    const missingEl = document.getElementById('ip-missing');
+    const gridEl    = document.getElementById('ip-grid');
+
+    statusEl.innerHTML  = '';
+    missingEl.innerHTML = '';
+    gridEl.innerHTML    = '';
+
+    if (!template) {
+      statusEl.innerHTML = '<div class="status-bar error">Please enter a URL template</div>';
+      return;
+    }
+    if (!template.includes('{variable}')) {
+      statusEl.innerHTML = '<div class="status-bar error">Template must contain <code style="font-family:var(--mono)">{variable}</code></div>';
+      return;
+    }
+    if (!listRaw) {
+      statusEl.innerHTML = '<div class="status-bar error">Please enter at least one variable</div>';
+      return;
+    }
+
+    const vars = listRaw.split('\n').map(v => v.trim()).filter(v => v !== '');
+    if (vars.length === 0) {
+      statusEl.innerHTML = '<div class="status-bar error">No valid variables found</div>';
+      return;
+    }
+
+    const cols   = parseInt(document.getElementById('ip-cols').value) || 3;
+    const imgSize = document.getElementById('ip-size').value;
+
+    statusEl.innerHTML = `<div class="status-bar info">Loading ${vars.length} image${vars.length > 1 ? 's' : ''}...</div>`;
+
+    const missing = [];
+    let loaded = 0;
+    let failed = 0;
+
+    // Build grid
+    gridEl.style.display = 'grid';
+    gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    gridEl.style.gap = '12px';
+
+    vars.forEach(variable => {
+      const url = template.replace(/\{variable\}/g, encodeURIComponent(variable));
+
+      const cell = document.createElement('div');
+      cell.style.cssText = 'background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;';
+
+      const imgWrap = document.createElement('div');
+      imgWrap.style.cssText = `height:${imgSize};display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f1f1f1;position:relative;`;
+
+      const img = document.createElement('img');
+      img.src   = url;
+      img.alt   = variable;
+      img.title = url;
+      img.style.cssText = `max-width:100%;max-height:100%;object-fit:contain;cursor:pointer;transition:transform 0.2s;`;
+      img.addEventListener('mouseover', () => { img.style.transform = 'scale(1.05)'; });
+      img.addEventListener('mouseout',  () => { img.style.transform = ''; });
+      img.addEventListener('click', () => window.open(url, '_blank'));
+
+      const label = document.createElement('div');
+      label.style.cssText = 'padding:6px 8px;font-size:12px;font-family:var(--mono);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-top:1px solid var(--border);';
+      label.title = url;
+      label.textContent = variable;
+
+      img.addEventListener('load', () => {
+        loaded++;
+        imgWrap.style.background = 'transparent';
+        updateStatus();
+      });
+
+      img.addEventListener('error', () => {
+        failed++;
+        missing.push({ variable, url });
+        imgWrap.style.background = 'var(--input-bg)';
+        imgWrap.innerHTML = `
+          <div style="text-align:center;padding:12px;color:var(--text-muted)">
+            <div style="font-size:28px;margin-bottom:6px">🚫</div>
+            <div style="font-size:11px;font-family:var(--mono);word-break:break-all">${escapeHtml(variable)}</div>
+          </div>`;
+        cell.style.borderColor = '#fca5a5';
+        label.style.color = '#dc2626';
+        updateStatus();
+      });
+
+      imgWrap.appendChild(img);
+      cell.appendChild(imgWrap);
+      cell.appendChild(label);
+      gridEl.appendChild(cell);
+    });
+
+    function updateStatus() {
+      const done = loaded + failed;
+      if (done < vars.length) {
+        statusEl.innerHTML = `<div class="status-bar info">Loading… ${done}/${vars.length}</div>`;
+        return;
+      }
+      // All done
+      if (failed === 0) {
+        statusEl.innerHTML = `<div class="status-bar success">✓ All ${vars.length} images loaded successfully</div>`;
+        missingEl.innerHTML = '';
+      } else {
+        statusEl.innerHTML = `<div class="status-bar info">✓ ${loaded} loaded &nbsp;|&nbsp; <span style="color:#dc2626;font-weight:700">✗ ${failed} missing</span></div>`;
+        // Missing report
+        const missingVars = missing.map(m => m.variable).join('\n');
+        const missingUrls = missing.map(m => m.url).join('\n');
+        missingEl.innerHTML = `
+          <div class="card" style="margin:0;border-left:3px solid #dc2626">
+            <div class="card-title" style="color:#dc2626;margin-bottom:12px">✗ Missing Images (${missing.length})</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <label class="field-label">Failed Variables</label>
+                <div style="position:relative">
+                  <textarea class="mono" rows="5" readonly style="font-size:12px">${escapeHtml(missingVars)}</textarea>
+                  <button class="btn btn-sm" style="position:absolute;top:6px;right:6px;opacity:0.85"
+                    onclick="copyToClipboard(${JSON.stringify(missingVars)})">Copy</button>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Failed URLs</label>
+                <div style="position:relative">
+                  <textarea class="mono" rows="5" readonly style="font-size:12px">${escapeHtml(missingUrls)}</textarea>
+                  <button class="btn btn-sm" style="position:absolute;top:6px;right:6px;opacity:0.85"
+                    onclick="copyToClipboard(${JSON.stringify(missingUrls)})">Copy</button>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }
+    }
+  });
+
+  document.getElementById('ip-clear').addEventListener('click', () => {
+    document.getElementById('ip-template').value = '';
+    document.getElementById('ip-list').value = '';
+    document.getElementById('ip-status').innerHTML = '';
+    document.getElementById('ip-missing').innerHTML = '';
+    document.getElementById('ip-grid').innerHTML = '';
+  });
+
+  // Allow re-loading on Enter in template field
+  document.getElementById('ip-template').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('ip-load').click();
+  });
 }
