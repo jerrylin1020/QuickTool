@@ -382,6 +382,8 @@ function openTool(id) {
   });
 
   tool.init();
+  restoreToolState(id);
+  setupToolStateAutoSave(id);
 }
 
 function showHome() {
@@ -389,6 +391,60 @@ function showHome() {
   document.getElementById('welcomeScreen').classList.remove('hidden');
   document.getElementById('toolView').classList.add('hidden');
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+}
+
+// =====================
+// Tool State Persistence
+// =====================
+const STATE_PREFIX = 'qt-state-';
+// Elements whose values we skip restoring (outputs / read-only)
+const SKIP_IDS = new Set();
+
+function getToolStateKey(id) { return STATE_PREFIX + id; }
+
+function saveToolState(id) {
+  const body = document.getElementById('toolBody');
+  if (!body) return;
+  const state = {};
+  body.querySelectorAll('input[id], textarea[id], select[id]').forEach(el => {
+    if (el.readOnly || el.disabled) return;
+    state[el.id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  localStorage.setItem(getToolStateKey(id), JSON.stringify(state));
+}
+
+function restoreToolState(id) {
+  const raw = localStorage.getItem(getToolStateKey(id));
+  if (!raw) return;
+  let state;
+  try { state = JSON.parse(raw); } catch { return; }
+
+  const body = document.getElementById('toolBody');
+  if (!body) return;
+
+  Object.entries(state).forEach(([elId, val]) => {
+    const el = document.getElementById(elId);
+    if (!el || el.readOnly || el.disabled) return;
+    if (el.type === 'checkbox') {
+      el.checked = val;
+    } else {
+      el.value = val;
+    }
+    // Dispatch input event so tools react (e.g. live preview tools)
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+function setupToolStateAutoSave(id) {
+  const body = document.getElementById('toolBody');
+  if (!body) return;
+  // Debounced save — avoids excessive writes while typing
+  let timer;
+  body.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => saveToolState(id), 400);
+  });
+  body.addEventListener('change', () => saveToolState(id));
 }
 
 // =====================
