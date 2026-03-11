@@ -236,6 +236,33 @@ const TOOLS = [
     render: renderImagePreview,
     init: initImagePreview,
   },
+  {
+    id: 'sql-formatter',
+    name: 'SQL Formatter',
+    icon: '🗄',
+    category: 'Data',
+    desc: 'Format and minify SQL — supports MySQL, PostgreSQL, SQLite and more',
+    render: renderSqlFormatter,
+    init: initSqlFormatter,
+  },
+  {
+    id: 'fake-data',
+    name: 'Fake Data Generator',
+    icon: '🎲',
+    category: 'Generator',
+    desc: 'Generate realistic fake data — names, emails, addresses and more',
+    render: renderFakeData,
+    init: initFakeData,
+  },
+  {
+    id: 'json-to-class',
+    name: 'JSON to Class',
+    icon: '{ }',
+    category: 'Data',
+    desc: 'Convert JSON to typed class/interface — C#, TypeScript, Python, Java, Go, Kotlin',
+    render: renderJsonToClass,
+    init: initJsonToClass,
+  },
 ];
 
 // =====================
@@ -2734,5 +2761,497 @@ function initImagePreview() {
   // Allow re-loading on Enter in template field
   document.getElementById('ip-template').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('ip-load').click();
+  });
+}
+
+// =====================
+// 26. SQL Formatter
+// =====================
+function renderSqlFormatter() {
+  return `
+    <div class="card">
+      <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:12px">
+        <div>
+          <label class="field-label">Dialect</label>
+          <select id="sf-dialect">
+            <option value="sql">Standard SQL</option>
+            <option value="mysql">MySQL</option>
+            <option value="postgresql">PostgreSQL</option>
+            <option value="sqlite">SQLite</option>
+            <option value="tsql">T-SQL (SQL Server)</option>
+            <option value="plsql">PL/SQL (Oracle)</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Indent</label>
+          <select id="sf-indent">
+            <option value="2">2 spaces</option>
+            <option value="4" selected>4 spaces</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Keywords</label>
+          <select id="sf-case">
+            <option value="upper">UPPERCASE</option>
+            <option value="lower">lowercase</option>
+            <option value="preserve">preserve</option>
+          </select>
+        </div>
+      </div>
+      <label class="field-label" style="margin-top:14px">Input SQL</label>
+      <textarea class="mono" id="sf-input" rows="10" placeholder="Paste your SQL here..."></textarea>
+      <div class="btn-group" style="margin:12px 0">
+        <button class="btn" id="sf-format">Format</button>
+        <button class="btn btn-ghost" id="sf-minify">Minify</button>
+        <button class="btn btn-ghost" id="sf-clear">Clear</button>
+      </div>
+      <div id="sf-status"></div>
+      <label class="field-label">Output</label>
+      <div style="position:relative">
+        <textarea class="mono" id="sf-output" rows="12" readonly placeholder="Result will appear here..."></textarea>
+        <button class="btn btn-sm" id="sf-copy" style="position:absolute;top:8px;right:8px;opacity:0.85">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
+function initSqlFormatter() {
+  const input    = document.getElementById('sf-input');
+  const output   = document.getElementById('sf-output');
+  const statusEl = document.getElementById('sf-status');
+
+  function getOptions() {
+    return {
+      language:            document.getElementById('sf-dialect').value,
+      tabWidth:            parseInt(document.getElementById('sf-indent').value),
+      keywordCase:         document.getElementById('sf-case').value,
+      linesBetweenQueries: 2,
+    };
+  }
+
+  document.getElementById('sf-format').addEventListener('click', () => {
+    if (!input.value.trim()) return;
+    if (typeof sqlFormatter === 'undefined') {
+      statusEl.innerHTML = '<div class="status-bar error">sql-formatter library not loaded. Check your network connection.</div>';
+      return;
+    }
+    try {
+      output.value = sqlFormatter.format(input.value, getOptions());
+      statusEl.innerHTML = '';
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">${escapeHtml(e.message)}</div>`;
+    }
+  });
+
+  document.getElementById('sf-minify').addEventListener('click', () => {
+    if (!input.value.trim()) return;
+    const minified = input.value
+      .replace(/--[^\n]*/g, '')        // remove line comments
+      .replace(/\/\*[\s\S]*?\*\//g, '') // remove block comments
+      .replace(/\s+/g, ' ')
+      .trim();
+    output.value = minified;
+    statusEl.innerHTML = '';
+  });
+
+  document.getElementById('sf-clear').addEventListener('click', () => {
+    input.value  = '';
+    output.value = '';
+    statusEl.innerHTML = '';
+  });
+
+  document.getElementById('sf-copy').addEventListener('click', () => {
+    if (output.value) copyToClipboard(output.value);
+  });
+}
+
+// =====================
+// 27. Fake Data Generator
+// =====================
+function renderFakeData() {
+  const fields = [
+    ['fullName','Full Name'],['firstName','First Name'],['lastName','Last Name'],
+    ['email','Email'],['phone','Phone'],['age','Age'],['dob','Date of Birth'],
+    ['address','Street Address'],['city','City'],['country','Country'],
+    ['company','Company'],['jobTitle','Job Title'],['username','Username'],
+    ['url','URL'],['ip','IP Address'],['uuid','UUID'],
+  ];
+  const defaultOn = new Set(['fullName','email','phone','city']);
+  const pills = fields.map(([v, l]) =>
+    `<label class="pill${defaultOn.has(v) ? ' active' : ''}" style="cursor:pointer;user-select:none">` +
+    `<input type="checkbox" value="${v}"${defaultOn.has(v) ? ' checked' : ''} style="display:none"> ${l}</label>`
+  ).join('');
+  return `
+    <div class="card">
+      <div class="row" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div style="width:100px">
+          <label class="field-label">Count</label>
+          <input type="number" id="fd-count" value="10" min="1" max="500" />
+        </div>
+        <div>
+          <label class="field-label">Format</label>
+          <select id="fd-format">
+            <option value="json">JSON Array</option>
+            <option value="csv">CSV</option>
+            <option value="tsv">TSV</option>
+          </select>
+        </div>
+        <div class="btn-group">
+          <button class="btn" id="fd-gen">Generate</button>
+          <button class="btn btn-ghost" id="fd-copy">Copy</button>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <label class="field-label">Fields</label>
+        <div id="fd-fields" class="pill-group" style="flex-wrap:wrap;gap:6px">${pills}</div>
+      </div>
+      <div id="fd-status" style="margin-top:8px"></div>
+      <label class="field-label" style="margin-top:12px">Output</label>
+      <textarea class="mono" id="fd-output" rows="14" readonly placeholder="Generated data will appear here..."></textarea>
+    </div>
+  `;
+}
+
+function initFakeData() {
+  const firstNames  = ['Alice','Bob','Charlie','Diana','Edward','Fiona','George','Hannah','Ivan','Julia','Kevin','Laura','Michael','Nina','Oscar','Paula','Quinn','Rachel','Samuel','Tina','Uma','Victor','Wendy','Xavier','Yolanda','Zack','Amy','Brian','Cathy','David','Emma','Frank','Grace','Henry','Iris','Jack','Kate','Liam','Mia','Noah','Olivia','Peter','Rose','Sean','Tara','Vince','Zoe','Chris','Alex','Jordan','Morgan'];
+  const lastNames   = ['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Wilson','Taylor','Anderson','Thomas','Jackson','White','Harris','Martin','Thompson','Young','Lee','Walker','Hall','Allen','King','Scott','Green','Baker','Adams','Nelson','Hill','Ramirez','Carter','Mitchell','Perez','Roberts','Turner','Phillips','Campbell','Parker','Evans','Edwards','Collins','Stewart','Morris','Morgan','Reed','Cook','Bailey','Rivera','Cooper','Cox'];
+  const domains     = ['gmail.com','yahoo.com','hotmail.com','outlook.com','icloud.com','proton.me'];
+  const streetNames = ['Main','Oak','Maple','Cedar','Pine','Elm','Washington','Lake','Hill','Park','River','Forest','Sunset','Meadow','Highland'];
+  const streetTypes = ['St','Ave','Blvd','Ln','Dr','Rd','Ct','Way'];
+  const cities      = ['New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphia','San Antonio','San Diego','Dallas','San Jose','Austin','Columbus','Charlotte','Indianapolis','Seattle','Denver','Nashville','Portland','Las Vegas','Boston','Memphis','Baltimore','Louisville','Milwaukee'];
+  const countries   = ['United States','Canada','United Kingdom','Australia','Germany','France','Japan','Brazil','India','Mexico','Italy','Spain','South Korea','Netherlands','Switzerland'];
+  const companyPfx  = ['Alpha','Beta','Nexus','Apex','Vertex','Core','Peak','Prime','Nova','Quantum','Blue','Sky'];
+  const companySfx  = ['Tech','Solutions','Systems','Group','Services','Labs','Digital','Global','Networks','Corp'];
+  const jobs        = ['Software Engineer','Product Manager','Data Scientist','UX Designer','DevOps Engineer','Marketing Manager','Sales Representative','Business Analyst','Project Manager','QA Engineer','Frontend Developer','Backend Developer','Full Stack Developer','Data Analyst','Systems Architect'];
+  const tlds        = ['com','net','org','io','co','dev','app'];
+  const fieldLabels = { fullName:'Full Name',firstName:'First Name',lastName:'Last Name',email:'Email',phone:'Phone',age:'Age',dob:'Date of Birth',address:'Street Address',city:'City',country:'Country',company:'Company',jobTitle:'Job Title',username:'Username',url:'URL',ip:'IP Address',uuid:'UUID' };
+
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function rnd(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+  function gen(field, first, last) {
+    switch (field) {
+      case 'fullName':  return `${first} ${last}`;
+      case 'firstName': return first;
+      case 'lastName':  return last;
+      case 'email':     return `${first.toLowerCase()}.${last.toLowerCase()}${rnd(0,1) ? rnd(1,99) : ''}@${pick(domains)}`;
+      case 'phone':     return `+1-${rnd(200,999)}-${rnd(100,999)}-${rnd(1000,9999)}`;
+      case 'age':       return rnd(18, 72);
+      case 'dob':       return `${rnd(1952,2005)}-${String(rnd(1,12)).padStart(2,'0')}-${String(rnd(1,28)).padStart(2,'0')}`;
+      case 'address':   return `${rnd(1,9999)} ${pick(streetNames)} ${pick(streetTypes)}`;
+      case 'city':      return pick(cities);
+      case 'country':   return pick(countries);
+      case 'company':   return `${pick(companyPfx)} ${pick(companySfx)}`;
+      case 'jobTitle':  return pick(jobs);
+      case 'username':  return `${first.toLowerCase()}${last.toLowerCase().slice(0,4)}${rnd(10,999)}`;
+      case 'url':       return `https://www.${first.toLowerCase()}${last.toLowerCase()}.${pick(tlds)}`;
+      case 'ip':        return `${rnd(1,254)}.${rnd(0,255)}.${rnd(0,255)}.${rnd(1,254)}`;
+      case 'uuid':      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                          const r = Math.random() * 16 | 0;
+                          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+                        });
+      default: return '';
+    }
+  }
+
+  document.querySelectorAll('#fd-fields input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => cb.closest('label').classList.toggle('active', cb.checked));
+  });
+
+  document.getElementById('fd-gen').addEventListener('click', () => {
+    const selected  = [...document.querySelectorAll('#fd-fields input:checked')].map(i => i.value);
+    const statusEl  = document.getElementById('fd-status');
+    if (selected.length === 0) {
+      statusEl.innerHTML = '<div class="status-bar error">Select at least one field</div>';
+      return;
+    }
+    statusEl.innerHTML = '';
+    const count = Math.min(500, Math.max(1, parseInt(document.getElementById('fd-count').value) || 10));
+    const fmt   = document.getElementById('fd-format').value;
+    const rows  = Array.from({ length: count }, () => {
+      const first = pick(firstNames);
+      const last  = pick(lastNames);
+      const row   = {};
+      selected.forEach(f => { row[f] = gen(f, first, last); });
+      return row;
+    });
+
+    let result;
+    if (fmt === 'json') {
+      result = JSON.stringify(rows, null, 2);
+    } else {
+      const sep    = fmt === 'tsv' ? '\t' : ',';
+      const header = selected.map(f => fieldLabels[f]).join(sep);
+      const lines  = rows.map(row =>
+        selected.map(f => {
+          const val = String(row[f]);
+          if (fmt === 'csv' && (val.includes(',') || val.includes('"') || val.includes('\n')))
+            return `"${val.replace(/"/g, '""')}"`;
+          return val;
+        }).join(sep)
+      );
+      result = [header, ...lines].join('\n');
+    }
+    document.getElementById('fd-output').value = result;
+  });
+
+  document.getElementById('fd-copy').addEventListener('click', () => {
+    const val = document.getElementById('fd-output').value;
+    if (val) copyToClipboard(val);
+  });
+}
+
+// =====================
+// 28. JSON to Class
+// =====================
+function renderJsonToClass() {
+  return `
+    <div class="card">
+      <div class="row" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div>
+          <label class="field-label">Target Language</label>
+          <select id="j2c-lang">
+            <option value="csharp">C#</option>
+            <option value="typescript">TypeScript</option>
+            <option value="python">Python (dataclass)</option>
+            <option value="java">Java</option>
+            <option value="go">Go</option>
+            <option value="kotlin">Kotlin</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Root Class Name</label>
+          <input type="text" id="j2c-rootname" value="Root" style="width:140px" />
+        </div>
+      </div>
+      <label class="field-label" style="margin-top:14px">Input JSON</label>
+      <textarea class="mono" id="j2c-input" rows="10" placeholder='{"name":"Alice","age":30,"active":true,"address":{"city":"NY","zip":"10001"},"tags":["admin","user"]}'></textarea>
+      <div class="btn-group" style="margin:12px 0">
+        <button class="btn" id="j2c-convert">Convert</button>
+        <button class="btn btn-ghost" id="j2c-clear">Clear</button>
+      </div>
+      <div id="j2c-status"></div>
+      <label class="field-label">Output</label>
+      <div style="position:relative">
+        <textarea class="mono" id="j2c-output" rows="14" readonly placeholder="Class definition will appear here..."></textarea>
+        <button class="btn btn-sm" id="j2c-copy" style="position:absolute;top:8px;right:8px;opacity:0.85">Copy</button>
+      </div>
+    </div>
+  `;
+}
+
+function initJsonToClass() {
+  const input    = document.getElementById('j2c-input');
+  const output   = document.getElementById('j2c-output');
+  const statusEl = document.getElementById('j2c-status');
+
+  function toPascalCase(str) {
+    return str.replace(/[-_\s]+(.)/g, (_, c) => c.toUpperCase()).replace(/^(.)/, c => c.toUpperCase());
+  }
+  function toCamelCase(str) {
+    return str.replace(/[-_\s]+(.)/g, (_, c) => c.toUpperCase());
+  }
+
+  function inferType(val, hintName, classes) {
+    if (val === null || val === undefined) return { kind: 'null' };
+    if (typeof val === 'boolean') return { kind: 'boolean' };
+    if (typeof val === 'number')  return Number.isInteger(val) ? { kind: 'int' } : { kind: 'float' };
+    if (typeof val === 'string')  return { kind: 'string' };
+    if (Array.isArray(val)) {
+      if (val.length === 0) return { kind: 'array', itemType: { kind: 'any' } };
+      return { kind: 'array', itemType: inferType(val[0], hintName, classes) };
+    }
+    if (typeof val === 'object') {
+      const className = toPascalCase(hintName || 'Object');
+      buildClass(val, className, classes);
+      return { kind: 'object', className };
+    }
+    return { kind: 'any' };
+  }
+
+  function buildClass(obj, className, classes) {
+    if (classes.find(c => c.name === className)) return;
+    const entry = { name: className, fields: [] };
+    classes.push(entry);
+    for (const [key, value] of Object.entries(obj)) {
+      entry.fields.push({ key, type: inferType(value, toPascalCase(key), classes), nullable: value === null });
+    }
+  }
+
+  function genCSharp(classes) {
+    function t(type, nullable) {
+      if (type.kind === 'null')    return 'object?';
+      if (type.kind === 'boolean') return nullable ? 'bool?' : 'bool';
+      if (type.kind === 'int')     return nullable ? 'int?' : 'int';
+      if (type.kind === 'float')   return nullable ? 'double?' : 'double';
+      if (type.kind === 'string')  return 'string';
+      if (type.kind === 'array')   return `List<${t(type.itemType, false)}>`;
+      if (type.kind === 'object')  return type.className;
+      return 'object';
+    }
+    return classes.map(cls => {
+      const props = cls.fields.map(f =>
+        `    public ${t(f.type, f.nullable)} ${toPascalCase(f.key)} { get; set; }`
+      ).join('\n');
+      return `public class ${cls.name}\n{\n${props}\n}`;
+    }).join('\n\n');
+  }
+
+  function genTypeScript(classes) {
+    function t(type, nullable) {
+      let base;
+      if (type.kind === 'null')    return 'null';
+      if (type.kind === 'boolean') base = 'boolean';
+      else if (type.kind === 'int' || type.kind === 'float') base = 'number';
+      else if (type.kind === 'string') base = 'string';
+      else if (type.kind === 'array')  base = `${t(type.itemType, false)}[]`;
+      else if (type.kind === 'object') base = type.className;
+      else base = 'any';
+      return nullable ? `${base} | null` : base;
+    }
+    return classes.map(cls => {
+      const props = cls.fields.map(f => `    ${f.key}${f.nullable ? '?' : ''}: ${t(f.type, f.nullable)};`).join('\n');
+      return `interface ${cls.name} {\n${props}\n}`;
+    }).join('\n\n');
+  }
+
+  function genPython(classes) {
+    function t(type, nullable) {
+      let base;
+      if (type.kind === 'null')    return 'None';
+      if (type.kind === 'boolean') base = 'bool';
+      else if (type.kind === 'int')    base = 'int';
+      else if (type.kind === 'float')  base = 'float';
+      else if (type.kind === 'string') base = 'str';
+      else if (type.kind === 'array')  base = `List[${t(type.itemType, false)}]`;
+      else if (type.kind === 'object') base = type.className;
+      else base = 'Any';
+      return nullable ? `Optional[${base}]` : base;
+    }
+    const allFields = classes.flatMap(c => c.fields);
+    const typing = [];
+    if (allFields.some(f => f.nullable))              typing.push('Optional');
+    if (allFields.some(f => f.type.kind === 'array')) typing.push('List');
+    if (allFields.some(f => f.type.kind === 'any'))   typing.push('Any');
+    const imports = ['from __future__ import annotations', 'from dataclasses import dataclass'];
+    if (typing.length) imports.push(`from typing import ${typing.join(', ')}`);
+    const classCode = [...classes].reverse().map(cls => {
+      const fields = cls.fields.map(f => `    ${toCamelCase(f.key)}: ${t(f.type, f.nullable)}`).join('\n');
+      return `@dataclass\nclass ${cls.name}:\n${fields}`;
+    }).join('\n\n');
+    return imports.join('\n') + '\n\n\n' + classCode;
+  }
+
+  function genJava(classes) {
+    function t(type, boxed) {
+      if (type.kind === 'null')    return 'Object';
+      if (type.kind === 'boolean') return boxed ? 'Boolean' : 'boolean';
+      if (type.kind === 'int')     return boxed ? 'Integer' : 'int';
+      if (type.kind === 'float')   return boxed ? 'Double'  : 'double';
+      if (type.kind === 'string')  return 'String';
+      if (type.kind === 'array')   return `List<${t(type.itemType, true)}>`;
+      if (type.kind === 'object')  return type.className;
+      return 'Object';
+    }
+    const needsList = classes.some(c => c.fields.some(f => f.type.kind === 'array'));
+    let out = needsList ? 'import java.util.List;\n\n' : '';
+    out += classes.map(cls => {
+      const fields  = cls.fields.map(f => `    private ${t(f.type, f.nullable)} ${toCamelCase(f.key)};`).join('\n');
+      const methods = cls.fields.map(f => {
+        const type  = t(f.type, f.nullable);
+        const camel = toCamelCase(f.key);
+        const pas   = toPascalCase(f.key);
+        return `    public ${type} get${pas}() { return ${camel}; }\n    public void set${pas}(${type} ${camel}) { this.${camel} = ${camel}; }`;
+      }).join('\n\n');
+      return `public class ${cls.name} {\n${fields}\n\n${methods}\n}`;
+    }).join('\n\n');
+    return out;
+  }
+
+  function genGo(classes) {
+    function t(type, ptr) {
+      const p = ptr ? '*' : '';
+      if (type.kind === 'null')    return 'interface{}';
+      if (type.kind === 'boolean') return `${p}bool`;
+      if (type.kind === 'int')     return `${p}int`;
+      if (type.kind === 'float')   return `${p}float64`;
+      if (type.kind === 'string')  return `${p}string`;
+      if (type.kind === 'array')   return `[]${t(type.itemType, false)}`;
+      if (type.kind === 'object')  return `${p}${type.className}`;
+      return 'interface{}';
+    }
+    return [...classes].reverse().map(cls => {
+      const maxKey  = Math.max(...cls.fields.map(f => toPascalCase(f.key).length));
+      const maxType = Math.max(...cls.fields.map(f => t(f.type, f.nullable).length));
+      const fields  = cls.fields.map(f =>
+        `    ${toPascalCase(f.key).padEnd(maxKey)} ${t(f.type, f.nullable).padEnd(maxType)} \`json:"${f.key}"\``
+      ).join('\n');
+      return `type ${cls.name} struct {\n${fields}\n}`;
+    }).join('\n\n');
+  }
+
+  function genKotlin(classes) {
+    function t(type, nullable) {
+      let base;
+      if (type.kind === 'null')    return 'Any?';
+      if (type.kind === 'boolean') base = 'Boolean';
+      else if (type.kind === 'int')    base = 'Int';
+      else if (type.kind === 'float')  base = 'Double';
+      else if (type.kind === 'string') base = 'String';
+      else if (type.kind === 'array')  base = `List<${t(type.itemType, false)}>`;
+      else if (type.kind === 'object') base = type.className;
+      else base = 'Any';
+      return nullable ? `${base}?` : base;
+    }
+    return [...classes].reverse().map(cls => {
+      const params = cls.fields.map(f =>
+        `    val ${toCamelCase(f.key)}: ${t(f.type, f.nullable)}${f.nullable ? ' = null' : ''}`
+      ).join(',\n');
+      return `data class ${cls.name}(\n${params}\n)`;
+    }).join('\n\n');
+  }
+
+  document.getElementById('j2c-convert').addEventListener('click', () => {
+    const raw = input.value.trim();
+    if (!raw) return;
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">Invalid JSON: ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+    if (Array.isArray(parsed)) parsed = parsed[0];
+    if (typeof parsed !== 'object' || parsed === null) {
+      statusEl.innerHTML = '<div class="status-bar error">Input must be a JSON object or array of objects</div>';
+      return;
+    }
+    const rootName = toPascalCase((document.getElementById('j2c-rootname').value.trim() || 'Root').replace(/[^a-zA-Z0-9_]/g, ''));
+    const lang     = document.getElementById('j2c-lang').value;
+    const classes  = [];
+    buildClass(parsed, rootName, classes);
+    let code;
+    try {
+      if (lang === 'csharp')          code = genCSharp(classes);
+      else if (lang === 'typescript') code = genTypeScript(classes);
+      else if (lang === 'python')     code = genPython(classes);
+      else if (lang === 'java')       code = genJava(classes);
+      else if (lang === 'go')         code = genGo(classes);
+      else if (lang === 'kotlin')     code = genKotlin(classes);
+    } catch (e) {
+      statusEl.innerHTML = `<div class="status-bar error">${escapeHtml(e.message)}</div>`;
+      return;
+    }
+    output.value = code;
+    statusEl.innerHTML = `<div class="status-bar success">✓ Generated ${classes.length} class${classes.length > 1 ? 'es' : ''}</div>`;
+  });
+
+  document.getElementById('j2c-clear').addEventListener('click', () => {
+    input.value = '';
+    output.value = '';
+    statusEl.innerHTML = '';
+  });
+
+  document.getElementById('j2c-copy').addEventListener('click', () => {
+    if (output.value) copyToClipboard(output.value);
   });
 }
