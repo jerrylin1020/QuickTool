@@ -386,6 +386,20 @@ function setupSidebar() {
 // =====================
 // Utility helpers
 // =====================
+
+// Safe copy registry — avoids embedding arbitrary text in HTML onclick attributes
+const _copyRegistry = new Map();
+let _copyIdCounter = 0;
+function registerCopy(text) {
+  const id = 'cp_' + (_copyIdCounter++);
+  _copyRegistry.set(id, text);
+  return id;
+}
+function copyFromRegistry(id) {
+  const text = _copyRegistry.get(id);
+  if (text !== undefined) copyToClipboard(text);
+}
+
 function copyToClipboard(text) {
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text)
@@ -1475,7 +1489,7 @@ function initListCompare() {
       <div class="card" style="margin:0;border-left:3px solid ${color}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <div class="card-title" style="color:${color};margin:0">${icon} ${title} <span style="font-weight:400;color:var(--text-muted)">(${items.length})</span></div>
-          <button class="btn btn-ghost btn-sm" onclick="copyToClipboard('${items.map(i => originalMap ? (originalMap.get(i) ?? i) : i).join('\\n').replace(/'/g, "\\'")}')">Copy</button>
+          <button class="btn btn-ghost btn-sm" onclick="copyFromRegistry('${registerCopy(items.map(i => originalMap ? (originalMap.get(i) ?? i) : i).join('\n'))}')">Copy</button>
         </div>
         <div style="max-height:220px;overflow-y:auto">${listHtml}</div>
       </div>`;
@@ -2539,7 +2553,7 @@ function initImagePreview() {
                 <div style="position:relative">
                   <textarea class="mono" rows="5" readonly style="font-size:12px">${escapeHtml(missingVars)}</textarea>
                   <button class="btn btn-sm" style="position:absolute;top:6px;right:6px;opacity:0.85"
-                    onclick="copyToClipboard(${JSON.stringify(missingVars)})">Copy</button>
+                    onclick="copyFromRegistry('${registerCopy(missingVars)}')">Copy</button>
                 </div>
               </div>
               <div>
@@ -2547,7 +2561,7 @@ function initImagePreview() {
                 <div style="position:relative">
                   <textarea class="mono" rows="5" readonly style="font-size:12px">${escapeHtml(missingUrls)}</textarea>
                   <button class="btn btn-sm" style="position:absolute;top:6px;right:6px;opacity:0.85"
-                    onclick="copyToClipboard(${JSON.stringify(missingUrls)})">Copy</button>
+                    onclick="copyFromRegistry('${registerCopy(missingUrls)}')">Copy</button>
                 </div>
               </div>
             </div>
