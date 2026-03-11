@@ -387,8 +387,29 @@ function setupSidebar() {
 // Utility helpers
 // =====================
 function copyToClipboard(text) {
-  navigator.clipboard.writeText(text).catch(() => {});
-  showCopyFeedback();
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text)
+      .then(() => showCopyFeedback())
+      .catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showCopyFeedback();
+  } catch (_) {
+    showCopyFeedback('Copy failed — please copy manually');
+  }
+  document.body.removeChild(ta);
 }
 
 function showCopyFeedback(msg = 'Copied to clipboard!') {
