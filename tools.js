@@ -665,7 +665,7 @@ function initJsonFormatter() {
 function renderStringJoiner() {
   return `
     <div class="card">
-      <label class="field-label">Enter strings (one per line)</label>
+      <label class="field-label">Enter strings (one per line) <span id="sj-in-count" style="font-weight:400;font-size:11px;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px"></span></label>
       <textarea id="sj-input" rows="10" placeholder="apple&#10;banana&#10;cherry"></textarea>
       <div class="row" style="margin-top:12px;align-items:flex-end">
         <div style="flex:1">
@@ -716,6 +716,13 @@ function initStringJoiner() {
   const emptyEl = document.getElementById('sj-empty');
   const quoteEl = document.getElementById('sj-quote');
   const statusEl = document.getElementById('sj-status');
+
+  function updateSjInCount() {
+    const n = input.value.split('\n').filter(l => l.trim() !== '').length;
+    document.getElementById('sj-in-count').textContent = n ? `(${n})` : '';
+  }
+  input.addEventListener('input', updateSjInCount);
+  updateSjInCount();
 
   document.querySelectorAll('.sj-preset').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1556,11 +1563,11 @@ function renderListCompare() {
     <div class="card">
       <div class="split-pane">
         <div>
-          <label class="field-label">List A</label>
+          <label class="field-label">List A <span id="lc-a-count" style="font-weight:400;font-size:11px;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px"></span></label>
           <textarea id="lc-a" rows="12" placeholder="111&#10;2122&#10;3333"></textarea>
         </div>
         <div>
-          <label class="field-label">List B</label>
+          <label class="field-label">List B <span id="lc-b-count" style="font-weight:400;font-size:11px;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px"></span></label>
           <textarea id="lc-b" rows="12" placeholder="2342&#10;111&#10;3333"></textarea>
         </div>
       </div>
@@ -1667,14 +1674,24 @@ function initListCompare() {
     document.getElementById('lc-results').innerHTML = '';
   });
 
+  function updateLcCounts() {
+    ['a', 'b'].forEach(side => {
+      const raw = document.getElementById(`lc-${side}`).value;
+      const n = raw.split('\n').filter(l => l.trim() !== '').length;
+      document.getElementById(`lc-${side}-count`).textContent = n ? `(${n})` : '';
+    });
+  }
+
   // Auto-compare on input
   ['lc-a', 'lc-b'].forEach(id => {
     document.getElementById(id).addEventListener('input', () => {
+      updateLcCounts();
       if (document.getElementById('lc-a').value || document.getElementById('lc-b').value) {
         document.getElementById('lc-compare').click();
       }
     });
   });
+  updateLcCounts();
 }
 
 // =====================
@@ -2058,7 +2075,7 @@ function initQrGenerator() {
 function renderLineSorter() {
   return `
     <div class="card">
-      <label class="field-label">Input (one item per line)</label>
+      <label class="field-label">Input (one item per line) <span id="ls-in-count" style="font-weight:400;font-size:11px;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px"></span></label>
       <textarea id="ls-input" rows="10" placeholder="Paste lines here..."></textarea>
       <div class="row" style="margin-top:12px;align-items:center;flex-wrap:wrap">
         <div class="btn-group">
@@ -2079,7 +2096,7 @@ function renderLineSorter() {
         </label>
       </div>
       <div style="margin-top:12px;position:relative">
-        <label class="field-label">Output</label>
+        <label class="field-label">Output <span id="ls-out-count" style="font-weight:400;font-size:11px;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px"></span></label>
         <textarea id="ls-output" rows="10" readonly placeholder="Result will appear here..."></textarea>
         <button class="btn btn-sm" id="ls-copy" style="position:absolute;top:24px;right:8px;opacity:0.85">Copy</button>
       </div>
@@ -2088,6 +2105,9 @@ function renderLineSorter() {
 }
 
 function initLineSorter() {
+  function countLines(text) {
+    return text.split('\n').filter(l => l.trim() !== '').length;
+  }
   function getLines() {
     let lines = document.getElementById('ls-input').value.split('\n');
     if (document.getElementById('ls-trim').checked) lines = lines.map(l => l.trim());
@@ -2095,8 +2115,17 @@ function initLineSorter() {
     return lines;
   }
   function setOutput(lines) {
-    document.getElementById('ls-output').value = lines.join('\n');
+    const out = document.getElementById('ls-output');
+    out.value = lines.join('\n');
+    const n = countLines(out.value);
+    document.getElementById('ls-out-count').textContent = n ? `(${n})` : '';
   }
+
+  const lsInput = document.getElementById('ls-input');
+  lsInput.addEventListener('input', () => {
+    const n = countLines(lsInput.value);
+    document.getElementById('ls-in-count').textContent = n ? `(${n})` : '';
+  });
 
   document.getElementById('ls-asc').addEventListener('click', () => {
     const cs = document.getElementById('ls-case').checked;
@@ -2514,7 +2543,7 @@ function renderImagePreview() {
       </div>
       <div class="row" style="margin-top:12px;align-items:flex-end;flex-wrap:wrap;gap:12px">
         <div style="flex:1;min-width:200px">
-          <label class="field-label">Variable List (one per line)</label>
+          <label class="field-label">Variable List (one per line) <span id="ip-list-count" style="font-weight:400;font-size:11px;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px"></span></label>
           <textarea id="ip-list" rows="6" placeholder="aaa&#10;bbb&#10;ccc"></textarea>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;min-width:160px">
@@ -2551,6 +2580,12 @@ function renderImagePreview() {
 }
 
 function initImagePreview() {
+  const ipListEl = document.getElementById('ip-list');
+  ipListEl.addEventListener('input', () => {
+    const n = ipListEl.value.split('\n').filter(l => l.trim() !== '').length;
+    document.getElementById('ip-list-count').textContent = n ? `(${n})` : '';
+  });
+
   document.getElementById('ip-load').addEventListener('click', () => {
     const template = document.getElementById('ip-template').value.trim();
     const listRaw  = document.getElementById('ip-list').value.trim();
