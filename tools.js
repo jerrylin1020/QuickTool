@@ -244,11 +244,67 @@ const TOOLS = [
 let currentToolId = null;
 
 // =====================
+// Pin State
+// =====================
+let pinnedIds = new Set(JSON.parse(localStorage.getItem('qt-pinned') || '[]'));
+
+function savePinned() {
+  localStorage.setItem('qt-pinned', JSON.stringify([...pinnedIds]));
+}
+
+function togglePin(id, e) {
+  e.stopPropagation();
+  if (pinnedIds.has(id)) {
+    pinnedIds.delete(id);
+  } else {
+    pinnedIds.add(id);
+  }
+  savePinned();
+  buildNav();
+  buildPinnedBar();
+}
+
+function buildPinnedBar() {
+  const bar    = document.getElementById('pinnedBar');
+  const inner  = document.getElementById('pinnedBarInner');
+  const pinned = TOOLS.filter(t => pinnedIds.has(t.id));
+
+  if (pinned.length === 0) {
+    bar.classList.add('hidden');
+    return;
+  }
+
+  bar.classList.remove('hidden');
+  inner.innerHTML = pinned.map(t => `
+    <button class="pinned-chip" data-tool-id="${t.id}">
+      <span class="pinned-chip-icon">${t.icon}</span>
+      <span class="pinned-chip-name">${t.name}</span>
+      <span class="pinned-chip-unpin" data-unpin-id="${t.id}" title="Unpin">✕</span>
+    </button>
+  `).join('');
+
+  inner.querySelectorAll('.pinned-chip').forEach(chip => {
+    chip.addEventListener('click', e => {
+      const unpinBtn = e.target.closest('[data-unpin-id]');
+      if (unpinBtn) {
+        pinnedIds.delete(unpinBtn.dataset.unpinId);
+        savePinned();
+        buildNav();
+        buildPinnedBar();
+      } else {
+        openTool(chip.dataset.toolId);
+      }
+    });
+  });
+}
+
+// =====================
 // Bootstrap
 // =====================
 document.addEventListener('DOMContentLoaded', () => {
   buildNav();
   buildGrid();
+  buildPinnedBar();
   setupSearch();
   setupTheme();
   setupSidebar();
@@ -276,11 +332,17 @@ function buildNav() {
     nav.appendChild(label);
 
     tools.forEach(tool => {
+      const isPinned = pinnedIds.has(tool.id);
       const btn = document.createElement('button');
-      btn.className = 'nav-item';
+      btn.className = 'nav-item' + (isPinned ? ' pinned' : '');
       btn.dataset.toolId = tool.id;
-      btn.innerHTML = `<span class="nav-icon">${tool.icon}</span><span class="tool-label">${tool.name}</span>`;
+      btn.innerHTML = `
+        <span class="nav-icon">${tool.icon}</span>
+        <span class="tool-label">${tool.name}</span>
+        <span class="pin-btn" title="${isPinned ? 'Unpin' : 'Pin to header'}">${isPinned ? '📌' : '📌'}</span>
+      `;
       btn.addEventListener('click', () => openTool(tool.id));
+      btn.querySelector('.pin-btn').addEventListener('click', e => togglePin(tool.id, e));
       nav.appendChild(btn);
     });
   });

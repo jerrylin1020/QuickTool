@@ -243,6 +243,76 @@ body {
   flex-direction: column;
 }
 
+/* Pinned bar */
+.pinned-bar {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pinned-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.pinned-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font);
+  padding: 4px 10px 4px 8px;
+  transition: background var(--transition), transform var(--transition);
+  white-space: nowrap;
+}
+.pinned-chip:hover { background: var(--accent); color: #fff; transform: translateY(-1px); }
+.pinned-chip:hover .pinned-chip-unpin { opacity: 1; }
+
+.pinned-chip-icon { font-size: 13px; }
+.pinned-chip-name { font-size: 12px; }
+.pinned-chip-unpin {
+  font-size: 11px;
+  opacity: 0.5;
+  margin-left: 2px;
+  line-height: 1;
+  transition: opacity var(--transition);
+}
+
+/* Pin button inside nav items */
+.nav-item { position: relative; }
+.nav-item .pin-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: opacity var(--transition), background var(--transition);
+  color: var(--sidebar-muted);
+  line-height: 1;
+}
+.nav-item:hover .pin-btn { opacity: 1; }
+.nav-item.pinned .pin-btn { opacity: 1; color: var(--accent); }
+.pin-btn:hover { background: rgba(255,255,255,0.1); }
+
 .tool-panel {
   flex: 1;
   overflow-y: auto;
