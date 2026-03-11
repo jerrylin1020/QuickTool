@@ -2413,10 +2413,13 @@ function initImagePreview() {
       statusEl.innerHTML = '<div class="status-bar error">Please enter a URL template</div>';
       return;
     }
-    if (!template.includes('{variable}')) {
-      statusEl.innerHTML = '<div class="status-bar error">Template must contain <code style="font-family:var(--mono)">{variable}</code></div>';
+    const placeholderMatch = template.match(/\{([^}]+)\}/);
+    if (!placeholderMatch) {
+      statusEl.innerHTML = '<div class="status-bar error">Template must contain a placeholder like <code style="font-family:var(--mono)">{variable}</code> or <code style="font-family:var(--mono)">{id}</code></div>';
       return;
     }
+    const escapedPlaceholder = placeholderMatch[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const placeholderRegex = new RegExp(escapedPlaceholder, 'g');
     if (!listRaw) {
       statusEl.innerHTML = '<div class="status-bar error">Please enter at least one variable</div>';
       return;
@@ -2443,7 +2446,7 @@ function initImagePreview() {
     gridEl.style.gap = '12px';
 
     vars.forEach(variable => {
-      const url = template.replace(/\{variable\}/g, encodeURIComponent(variable));
+      const url = template.replace(placeholderRegex, encodeURIComponent(variable));
 
       const cell = document.createElement('div');
       cell.style.cssText = 'background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;';
