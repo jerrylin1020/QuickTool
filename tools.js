@@ -2654,6 +2654,72 @@ function initImagePreview() {
     const missing = [];
     let loaded = 0;
     let failed = 0;
+    let pendingFetches = 0;
+
+    async function fetchHttpStatus(url) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        const ct  = res.headers.get('content-type') || '';
+        let body  = null;
+        try {
+          if (ct.includes('json')) {
+            body = JSON.stringify(await res.json(), null, 2);
+          } else if (ct.includes('text/plain')) {
+            body = (await res.text()).slice(0, 1000);
+          }
+        } catch { /* ignore body read errors */ }
+        return { status: res.status, statusText: res.statusText, body, err: null };
+      } catch {
+        return { status: null, statusText: null, body: null, err: 'CORS / network error' };
+      }
+    }
+
+    function refreshMissingReport() {
+      if (missing.length === 0) { missingEl.innerHTML = ''; return; }
+      function statusCell(m) {
+        if (m.status === null && m.err === null)
+          return `<span style="color:#9ca3af">checking…</span>`;
+        if (m.status !== null) {
+          const c = m.status >= 500 ? '#ef4444' : m.status >= 400 ? '#f97316' : '#6b7280';
+          return `<span style="color:${c};font-weight:700">HTTP ${m.status}</span>${m.statusText ? ` <span style="color:${c}">${escapeHtml(m.statusText)}</span>` : ''}`;
+        }
+        return `<span style="color:#9ca3af">${escapeHtml(m.err || 'unknown')}</span>`;
+      }
+      const missingVars = missing.map(m => m.variable).join('\n');
+      const missingUrls = missing.map(m => m.url).join('\n');
+      const rows = missing.map(m => {
+        const bodyPreview = m.body
+          ? `<pre style="margin:3px 0 0;padding:3px 6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;font-size:10px;max-height:60px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:var(--text)">${escapeHtml(m.body)}</pre>`
+          : `<span style="color:#6b7280;font-size:11px">—</span>`;
+        return `
+        <tr>
+          <td style="padding:4px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;vertical-align:top">${escapeHtml(m.variable)}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;white-space:nowrap;vertical-align:top">${statusCell(m)}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;vertical-align:top">${bodyPreview}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text-muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top" title="${escapeHtml(m.url)}">${escapeHtml(m.url)}</td>
+        </tr>`}).join('');
+      missingEl.innerHTML = `
+        <div class="card" style="margin:0;border-left:3px solid #dc2626">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div class="card-title" style="color:#dc2626;margin:0">✗ Missing Images (${missing.length})</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ghost btn-sm" onclick="copyFromRegistry('${registerCopy(missingVars)}')">Copy Variables</button>
+              <button class="btn btn-ghost btn-sm" onclick="copyFromRegistry('${registerCopy(missingUrls)}')">Copy URLs</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse">
+              <thead><tr>
+                <th style="text-align:left;padding:4px 8px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Variable</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Status</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">Response Body</th>
+                <th style="text-align:left;padding:4px 8px;border-bottom:2px solid var(--border);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">URL</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
 
     // Build grid
     gridEl.style.display = 'grid';
@@ -2691,16 +2757,39 @@ function initImagePreview() {
 
       img.addEventListener('error', () => {
         failed++;
-        missing.push({ variable, url });
+        const entry = { variable, url, status: null, statusText: null, err: null };
+        missing.push(entry);
+        const statusDivId = `ip-cs-${failed}`;
         imgWrap.style.background = 'var(--input-bg)';
         imgWrap.innerHTML = `
-          <div style="text-align:center;padding:12px;color:var(--text-muted)">
+          <div style="text-align:center;padding:12px;">
             <div style="font-size:28px;margin-bottom:6px">🚫</div>
-            <div style="font-size:11px;font-family:var(--mono);word-break:break-all">${escapeHtml(variable)}</div>
+            <div style="font-size:11px;font-family:var(--mono);word-break:break-all;color:var(--text-muted)">${escapeHtml(variable)}</div>
+            <div id="${statusDivId}" style="font-size:11px;margin-top:6px;font-family:var(--mono);color:#9ca3af">checking...</div>
           </div>`;
         cell.style.borderColor = '#fca5a5';
         label.style.color = '#dc2626';
         updateStatus();
+
+        pendingFetches++;
+        fetchHttpStatus(url).then(result => {
+          Object.assign(entry, result);
+          pendingFetches--;
+          const div = document.getElementById(statusDivId);
+          if (div) {
+            div.style.cssText = 'font-size:11px;margin-top:6px;font-family:var(--mono);text-align:left;width:100%;';
+            if (result.status !== null) {
+              const c = result.status >= 500 ? '#ef4444' : result.status >= 400 ? '#f97316' : '#6b7280';
+              const bodyHtml = result.body
+                ? `<pre style="margin:4px 0 0;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;font-size:10px;max-height:72px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:var(--text);text-align:left">${escapeHtml(result.body)}</pre>`
+                : '';
+              div.innerHTML = `<span style="color:${c};font-weight:700">HTTP ${result.status}${result.statusText ? ` ${result.statusText}` : ''}</span>${bodyHtml}`;
+            } else {
+              div.innerHTML = `<span style="color:#9ca3af">${escapeHtml(result.err || 'unknown')}</span>`;
+            }
+          }
+          if (loaded + failed >= vars.length) refreshMissingReport();
+        });
       });
 
       imgWrap.appendChild(img);
@@ -2715,37 +2804,12 @@ function initImagePreview() {
         statusEl.innerHTML = `<div class="status-bar info">Loading… ${done}/${vars.length}</div>`;
         return;
       }
-      // All done
       if (failed === 0) {
         statusEl.innerHTML = `<div class="status-bar success">✓ All ${vars.length} images loaded successfully</div>`;
         missingEl.innerHTML = '';
       } else {
-        statusEl.innerHTML = `<div class="status-bar info">✓ ${loaded} loaded &nbsp;|&nbsp; <span style="color:#dc2626;font-weight:700">✗ ${failed} missing</span></div>`;
-        // Missing report
-        const missingVars = missing.map(m => m.variable).join('\n');
-        const missingUrls = missing.map(m => m.url).join('\n');
-        missingEl.innerHTML = `
-          <div class="card" style="margin:0;border-left:3px solid #dc2626">
-            <div class="card-title" style="color:#dc2626;margin-bottom:12px">✗ Missing Images (${missing.length})</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-              <div>
-                <label class="field-label">Failed Variables</label>
-                <div style="position:relative">
-                  <textarea class="mono" rows="5" readonly style="font-size:12px">${escapeHtml(missingVars)}</textarea>
-                  <button class="btn btn-sm" style="position:absolute;top:6px;right:6px;opacity:0.85"
-                    onclick="copyFromRegistry('${registerCopy(missingVars)}')">Copy</button>
-                </div>
-              </div>
-              <div>
-                <label class="field-label">Failed URLs</label>
-                <div style="position:relative">
-                  <textarea class="mono" rows="5" readonly style="font-size:12px">${escapeHtml(missingUrls)}</textarea>
-                  <button class="btn btn-sm" style="position:absolute;top:6px;right:6px;opacity:0.85"
-                    onclick="copyFromRegistry('${registerCopy(missingUrls)}')">Copy</button>
-                </div>
-              </div>
-            </div>
-          </div>`;
+        statusEl.innerHTML = `<div class="status-bar info">✓ ${loaded} loaded &nbsp;|&nbsp; <span style="color:#dc2626;font-weight:700">✗ ${failed} missing — fetching HTTP status…</span></div>`;
+        refreshMissingReport();
       }
     }
   });
