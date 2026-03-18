@@ -3356,7 +3356,7 @@ function renderSqlJoinBuilder() {
       .sjb-badge.uq{background:rgba(78,205,196,0.12);color:#4ecdc4;border:1px solid rgba(78,205,196,0.25)}
       .sjb-rel-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px}
       .sjb-code-block{font-family:var(--mono);font-size:11px;line-height:1.65;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;white-space:pre-wrap;word-break:break-all;margin-bottom:8px;overflow-x:auto}
-      .sjb-copy-btn{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:3px;font-size:10px;cursor:pointer;background:var(--bg);border:1px solid var(--border);color:var(--text-muted);margin-bottom:4px;transition:all 0.15s;float:right}
+      .sjb-copy-btn{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:3px;font-size:10px;cursor:pointer;background:var(--bg);border:1px solid var(--border);color:var(--text-muted);transition:all 0.15s;position:absolute;top:8px;right:8px;z-index:1}
       .sjb-copy-btn:hover{color:var(--text);border-color:var(--accent)}
       .sjb-kw{color:#c792ea}
       .sjb-tb{color:#4ecdc4}
@@ -3825,8 +3825,10 @@ GO`;
     }).join('\n\n');
     const copyId = registerCopy(script);
     outputBody.innerHTML = `
-      <button class="sjb-copy-btn" onclick="copyFromRegistry('${copyId}')">⧉ Copy</button>
-      <pre class="sjb-code-block">${syntaxHL(script)}</pre>`;
+      <div style="position:relative">
+        <button class="sjb-copy-btn" onclick="copyFromRegistry('${copyId}')">⧉ Copy</button>
+        <pre class="sjb-code-block">${syntaxHL(script)}</pre>
+      </div>`;
   }
 
   function renderJoinScript() {
@@ -3859,8 +3861,10 @@ GO`;
 
     const copyId = registerCopy(sql);
     outputBody.innerHTML = `
-      <button class="sjb-copy-btn" onclick="copyFromRegistry('${copyId}')">⧉ Copy</button>
-      <pre class="sjb-code-block">${syntaxHL(sql)}</pre>`;
+      <div style="position:relative">
+        <button class="sjb-copy-btn" onclick="copyFromRegistry('${copyId}')">⧉ Copy</button>
+        <pre class="sjb-code-block">${syntaxHL(sql)}</pre>
+      </div>`;
   }
 
   // ── STATUS & BUTTONS ──────────────────────────────────────────────────────
