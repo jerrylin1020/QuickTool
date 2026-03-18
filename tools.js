@@ -407,7 +407,9 @@ function openTool(id) {
 
   document.getElementById('toolTitle').textContent = `${tool.icon}  ${tool.name}`;
   document.getElementById('toolDesc').textContent = tool.desc;
-  document.getElementById('toolBody').innerHTML = tool.render();
+  const toolBody = document.getElementById('toolBody');
+  toolBody.style.maxWidth = '';  // reset any per-tool override
+  toolBody.innerHTML = tool.render();
 
   document.getElementById('welcomeScreen').classList.add('hidden');
   document.getElementById('toolView').classList.remove('hidden');
@@ -3411,6 +3413,8 @@ function renderSqlJoinBuilder() {
 }
 
 function initSqlJoinBuilder() {
+  document.getElementById('toolBody').style.maxWidth = 'none';
+
   let tables    = [];   // {id,name,fullPath,alias,fields:[{name,type,pk,nn,uq,fk}],x,y,color}
   let relations = [];   // {id,fromTable,fromField,toTable,toField}
   let connectMode   = false;
