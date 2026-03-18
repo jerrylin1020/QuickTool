@@ -3361,7 +3361,7 @@ function renderSqlJoinBuilder() {
       .sjb-kw{color:#c792ea}
       .sjb-tb{color:#4ecdc4}
       .sjb-cm{color:var(--text-muted);font-style:italic}
-      .sjb-canvas-wrap{flex:1;position:relative;min-height:520px;overflow:hidden;background-color:var(--bg);background-image:linear-gradient(rgba(128,128,128,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(128,128,128,0.07) 1px,transparent 1px);background-size:40px 40px}
+      .sjb-canvas-wrap{position:relative;height:600px;overflow:hidden;background-color:var(--bg);background-image:linear-gradient(rgba(128,128,128,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(128,128,128,0.07) 1px,transparent 1px);background-size:40px 40px}
     </style>
 
     <div class="card" id="sjb-input-card">
@@ -3378,27 +3378,14 @@ function renderSqlJoinBuilder() {
       <div id="sjb-parse-status" style="margin-top:8px"></div>
     </div>
 
-    <div id="sjb-workspace" style="display:none;margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;min-height:520px">
-      <div style="display:flex;height:520px">
-        <!-- Canvas -->
-        <div class="sjb-canvas-wrap" id="sjb-canvas-wrap">
-          <div id="sjb-connect-banner" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:7px 18px;border-radius:20px;font-size:12px;font-weight:500;z-index:10;white-space:nowrap;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
-            Click a field in another table to link — ESC to cancel
-          </div>
-          <svg id="sjb-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible"></svg>
-          <div id="sjb-tables-canvas" style="position:absolute;inset:0;z-index:2"></div>
+    <div id="sjb-workspace" style="display:none;margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <!-- Canvas — full width -->
+      <div class="sjb-canvas-wrap" id="sjb-canvas-wrap">
+        <div id="sjb-connect-banner" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:7px 18px;border-radius:20px;font-size:12px;font-weight:500;z-index:10;white-space:nowrap;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
+          Click a field in another table to link — ESC to cancel
         </div>
-        <!-- Output panel -->
-        <div style="width:290px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column">
-          <div style="display:flex;border-bottom:1px solid var(--border);padding:0 6px;flex-shrink:0;margin-bottom:-1px">
-            <div class="sjb-tab sjb-active" data-tab="relations">Relations</div>
-            <div class="sjb-tab" data-tab="fk">FK Script</div>
-            <div class="sjb-tab" data-tab="join">JOIN SQL</div>
-          </div>
-          <div id="sjb-output-body" style="flex:1;overflow-y:auto;padding:10px">
-            <div style="text-align:center;padding:32px 12px;color:var(--text-muted);font-size:12px;line-height:1.7">Connect fields between tables<br>to see output here</div>
-          </div>
-        </div>
+        <svg id="sjb-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible"></svg>
+        <div id="sjb-tables-canvas" style="position:absolute;inset:0;z-index:2"></div>
       </div>
       <!-- Status bar -->
       <div id="sjb-statusbar" style="display:flex;align-items:center;gap:10px;padding:5px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted)">
@@ -3407,6 +3394,17 @@ function renderSqlJoinBuilder() {
         <span>·</span>
         <span id="sjb-status-rels">0 relations</span>
         <span id="sjb-status-mode" style="margin-left:auto"></span>
+      </div>
+      <!-- Output panel — full width, below canvas -->
+      <div style="border-top:1px solid var(--border)">
+        <div style="display:flex;border-bottom:1px solid var(--border);padding:0 6px;margin-bottom:-1px">
+          <div class="sjb-tab sjb-active" data-tab="relations">Relations</div>
+          <div class="sjb-tab" data-tab="fk">FK Script</div>
+          <div class="sjb-tab" data-tab="join">JOIN SQL</div>
+        </div>
+        <div id="sjb-output-body" style="max-height:320px;overflow-y:auto;padding:12px">
+          <div style="text-align:center;padding:32px 12px;color:var(--text-muted);font-size:12px;line-height:1.7">Connect fields between tables<br>to see output here</div>
+        </div>
       </div>
     </div>
   `;
