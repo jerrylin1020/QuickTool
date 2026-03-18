@@ -3329,540 +3329,569 @@ function initJsonToClass() {
   });
 }
 
+
 // =====================
 // 29. SQL Join Builder
 // =====================
 function renderSqlJoinBuilder() {
   return `
+    <style id="sjb-styles">
+      .sjb-tab{padding:9px 14px;font-size:12px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;user-select:none;white-space:nowrap}
+      .sjb-tab:hover{color:var(--text)}
+      .sjb-tab.sjb-active{color:var(--accent);border-bottom-color:var(--accent)}
+      .sjb-table-card{position:absolute;background:var(--card-bg,#1e2230);border:1px solid var(--border);border-radius:8px;min-width:200px;max-width:300px;box-shadow:0 4px 20px rgba(0,0,0,0.35);user-select:none;transition:border-color 0.15s}
+      .sjb-table-card:hover{border-color:var(--accent)}
+      .sjb-field-row{display:flex;align-items:center;gap:6px;padding:5px 10px;font-family:var(--mono);font-size:12px;cursor:crosshair;transition:background 0.1s}
+      .sjb-field-row:hover{background:rgba(128,128,128,0.09)}
+      .sjb-field-row.sjb-connecting{background:rgba(79,142,247,0.14)}
+      .sjb-field-row.sjb-connect-target:hover{background:rgba(62,207,142,0.12)}
+      .sjb-dot{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg);flex-shrink:0;transition:all 0.15s}
+      .sjb-field-row:hover .sjb-dot{border-color:var(--accent);background:var(--accent);transform:scale(1.3)}
+      .sjb-dot.pk{border-color:#f5c542;background:#f5c542}
+      .sjb-dot.fk{border-color:#4f8ef7;background:transparent}
+      .sjb-badge{font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px}
+      .sjb-badge.pk{background:rgba(245,197,66,0.15);color:#f5c542;border:1px solid rgba(245,197,66,0.3)}
+      .sjb-badge.fk{background:rgba(79,142,247,0.15);color:#4f8ef7;border:1px solid rgba(79,142,247,0.3)}
+      .sjb-badge.nn{background:rgba(224,82,82,0.12);color:#e05252;border:1px solid rgba(224,82,82,0.25)}
+      .sjb-badge.uq{background:rgba(78,205,196,0.12);color:#4ecdc4;border:1px solid rgba(78,205,196,0.25)}
+      .sjb-rel-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px}
+      .sjb-code-block{font-family:var(--mono);font-size:11px;line-height:1.65;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;white-space:pre-wrap;word-break:break-all;margin-bottom:8px;overflow-x:auto}
+      .sjb-copy-btn{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:3px;font-size:10px;cursor:pointer;background:var(--bg);border:1px solid var(--border);color:var(--text-muted);margin-bottom:4px;transition:all 0.15s;float:right}
+      .sjb-copy-btn:hover{color:var(--text);border-color:var(--accent)}
+      .sjb-kw{color:#c792ea}
+      .sjb-tb{color:#4ecdc4}
+      .sjb-cm{color:var(--text-muted);font-style:italic}
+      .sjb-canvas-wrap{flex:1;position:relative;min-height:520px;overflow:hidden;background-color:var(--bg);background-image:linear-gradient(rgba(128,128,128,0.07) 1px,transparent 1px),linear-gradient(90deg,rgba(128,128,128,0.07) 1px,transparent 1px);background-size:40px 40px}
+    </style>
+
     <div class="card" id="sjb-input-card">
-      <label class="field-label">SQL SELECT Statements (one per table)</label>
-      <textarea class="mono" id="sjb-input" rows="10" placeholder="Paste multiple SELECT queries here. Example:
+      <label class="field-label">SQL Schema Input</label>
+      <textarea class="mono" id="sjb-input" rows="7" placeholder="Paste any SQL format (supports multiple tables at once):
 
-SELECT TOP (1000) [ColA], [ColB]
-  FROM [DB].[dbo].[TableOne]
-
-SELECT TOP (1000) [ColA], [ColC]
-  FROM [DB].[dbo].[TableTwo] t2"></textarea>
-      <div class="btn-group" style="margin-top:12px">
-        <button class="btn" id="sjb-parse">Parse Tables</button>
-        <button class="btn btn-ghost" id="sjb-clear-input">Clear</button>
+• SELECT TOP (N) [col],[col] FROM [db].[dbo].[Table]
+• CREATE TABLE with full field definitions
+• Multiple tables: just paste them all together"></textarea>
+      <div class="btn-group" style="margin-top:10px">
+        <button class="btn" id="sjb-parse">Parse &amp; Add Tables</button>
+        <button class="btn btn-ghost" id="sjb-clear-all">Clear All</button>
       </div>
-      <div id="sjb-parse-status"></div>
+      <div id="sjb-parse-status" style="margin-top:8px"></div>
     </div>
 
-    <div id="sjb-editor" style="display:none">
-      <div class="card" style="padding:12px 16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-          <div class="card-title" style="margin:0">Visual Join Builder</div>
-          <div style="font-size:12px;color:var(--text-muted)">
-            Click the <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--text-muted);vertical-align:middle"></span> dot on a column, then click a column in another table to link them
+    <div id="sjb-workspace" style="display:none;margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;min-height:520px">
+      <div style="display:flex;height:520px">
+        <!-- Canvas -->
+        <div class="sjb-canvas-wrap" id="sjb-canvas-wrap">
+          <div id="sjb-connect-banner" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:7px 18px;border-radius:20px;font-size:12px;font-weight:500;z-index:10;white-space:nowrap;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
+            Click a field in another table to link — ESC to cancel
           </div>
+          <svg id="sjb-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible"></svg>
+          <div id="sjb-tables-canvas" style="position:absolute;inset:0;z-index:2"></div>
         </div>
-        <div id="sjb-canvas" style="position:relative;min-height:200px;overflow:visible">
-          <svg id="sjb-svg" style="position:absolute;top:0;left:0;width:100%;pointer-events:none;overflow:visible;z-index:1"></svg>
-          <div id="sjb-tables" style="display:flex;gap:20px;flex-wrap:wrap;position:relative;z-index:2;padding-bottom:8px"></div>
-        </div>
-      </div>
-
-      <div class="card" id="sjb-joins-card" style="display:none">
-        <div class="card-title">Configured Joins</div>
-        <div id="sjb-joins-list"></div>
-      </div>
-
-      <div class="card">
-        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
-          <div>
-            <label class="field-label">Default Join Type</label>
-            <select id="sjb-default-join">
-              <option value="INNER">INNER JOIN</option>
-              <option value="LEFT">LEFT JOIN</option>
-              <option value="RIGHT">RIGHT JOIN</option>
-              <option value="FULL">FULL OUTER JOIN</option>
-            </select>
+        <!-- Output panel -->
+        <div style="width:290px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column">
+          <div style="display:flex;border-bottom:1px solid var(--border);padding:0 6px;flex-shrink:0;margin-bottom:-1px">
+            <div class="sjb-tab sjb-active" data-tab="relations">Relations</div>
+            <div class="sjb-tab" data-tab="fk">FK Script</div>
+            <div class="sjb-tab" data-tab="join">JOIN SQL</div>
           </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn" id="sjb-generate">Generate SQL</button>
-            <button class="btn btn-ghost" id="sjb-clear-joins">Clear Joins</button>
+          <div id="sjb-output-body" style="flex:1;overflow-y:auto;padding:10px">
+            <div style="text-align:center;padding:32px 12px;color:var(--text-muted);font-size:12px;line-height:1.7">Connect fields between tables<br>to see output here</div>
           </div>
         </div>
       </div>
-
-      <div id="sjb-output-card" class="card" style="display:none">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <label class="field-label" style="margin:0">Generated SQL</label>
-          <button class="btn btn-sm" id="sjb-copy">Copy</button>
-        </div>
-        <textarea class="mono" id="sjb-output" rows="14" readonly placeholder="Generated SQL will appear here..."></textarea>
+      <!-- Status bar -->
+      <div id="sjb-statusbar" style="display:flex;align-items:center;gap:10px;padding:5px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted)">
+        <span style="width:6px;height:6px;border-radius:50%;background:#3ecf8e;flex-shrink:0;display:inline-block"></span>
+        <span id="sjb-status-tables">0 tables</span>
+        <span>·</span>
+        <span id="sjb-status-rels">0 relations</span>
+        <span id="sjb-status-mode" style="margin-left:auto"></span>
       </div>
     </div>
   `;
 }
 
 function initSqlJoinBuilder() {
-  let tables  = [];   // [{id, fullPath, tableName, alias, columns:[{name,selected}]}]
-  let joins   = [];   // [{id, fromTableId, fromCol, toTableId, toCol, type}]
-  let pending = null; // {tableId, col} — waiting for second click
-  let joinIdCtr = 0;
+  let tables    = [];   // {id,name,fullPath,alias,fields:[{name,type,pk,nn,uq,fk}],x,y,color}
+  let relations = [];   // {id,fromTable,fromField,toTable,toField}
+  let connectMode   = false;
+  let connectSource = null;  // {tableName, fieldName}
+  let dragging      = null;  // {tableId, t, ox, oy}
+  let currentTab    = 'relations';
+  let relIdCtr      = 0;
 
-  const statusEl    = document.getElementById('sjb-parse-status');
-  const editorEl    = document.getElementById('sjb-editor');
-  const tablesEl    = document.getElementById('sjb-tables');
-  const svgEl       = document.getElementById('sjb-svg');
-  const canvasEl    = document.getElementById('sjb-canvas');
-  const joinsCardEl = document.getElementById('sjb-joins-card');
-  const joinsListEl = document.getElementById('sjb-joins-list');
-  const outputCardEl = document.getElementById('sjb-output-card');
-  const outputEl    = document.getElementById('sjb-output');
+  const COLORS = ['#4f8ef7','#9b71ea','#3ecf8e','#f5a623','#4ecdc4','#e05252','#f5c542','#e879a0'];
+  const FIELD_H  = 28;
+  const HEADER_H = 40;
 
-  // ── Parsing ──────────────────────────────────────────────────────────────
+  const workspaceEl   = document.getElementById('sjb-workspace');
+  const tablesCanvas  = document.getElementById('sjb-tables-canvas');
+  const svgEl         = document.getElementById('sjb-svg');
+  const canvasWrap    = document.getElementById('sjb-canvas-wrap');
+  const connectBanner = document.getElementById('sjb-connect-banner');
+  const outputBody    = document.getElementById('sjb-output-body');
+  const parseStatus   = document.getElementById('sjb-parse-status');
+  const statusTables  = document.getElementById('sjb-status-tables');
+  const statusRels    = document.getElementById('sjb-status-rels');
+  const statusMode    = document.getElementById('sjb-status-mode');
 
-  function splitQueries(sql) {
-    const lines = sql.split('\n');
-    const parts = [];
-    let current = [];
-    for (const line of lines) {
-      if (current.length > 0 && /^\s*SELECT\b/i.test(line)) {
-        parts.push(current.join('\n'));
-        current = [line];
-      } else if (/^\s*;\s*$/.test(line)) {
-        if (current.length) { parts.push(current.join('\n')); current = []; }
-      } else {
-        current.push(line);
-      }
-    }
-    if (current.length) parts.push(current.join('\n'));
-    return parts.filter(p => /SELECT/i.test(p));
+  // ── PARSER ────────────────────────────────────────────────────────────────
+
+  function cleanName(s) { return (s || '').replace(/[\[\]`"]/g, '').trim(); }
+
+  function guessPK(name) {
+    const n = name.toLowerCase();
+    return n === 'id' || (n.endsWith('id') && n.length <= 20);
   }
 
-  function parseSqlSelect(query) {
-    query = query.trim()
-      .replace(/--[^\n]*/g, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-
-    // Extract FROM clause (everything up to WHERE / ORDER / GROUP / HAVING or end)
-    const fromMatch = query.match(/\bFROM\b([\s\S]+?)(?=\bWHERE\b|\bORDER\s+BY\b|\bGROUP\s+BY\b|\bHAVING\b|$)/i);
-    if (!fromMatch) return null;
-    const fromClause = fromMatch[1].trim();
-
-    // Table reference: [db].[schema].[table] or db.schema.table, optional alias
-    const tableRx = /^((?:\[[\w\s]+\]\.)*\[[\w\s]+\]|(?:[\w]+\.)*[\w]+)\s*(?:AS\s+)?(\w+)?\s*$/i;
-    const tMatch = fromClause.match(tableRx);
-    if (!tMatch) return null;
-
-    const fullPath = tMatch[1].trim();
-    const alias    = tMatch[2] || null;
-    const shortM   = fullPath.match(/\[([^\]]+)\]\s*$/) || fullPath.match(/(\w+)$/);
-    const tableName = shortM ? shortM[1] : fullPath;
-
-    // Extract SELECT columns (between SELECT and FROM)
-    const selMatch = query.match(/\bSELECT\b([\s\S]+?)\bFROM\b/i);
-    if (!selMatch) return null;
-
-    const colStr = selMatch[1].trim().replace(/^TOP\s*\(\d+\)\s*/i, '');
-    const columns = colStr.split(',').map(c => {
-      c = c.trim();
-      const bm = c.match(/\[([^\]]+)\]\s*$/);
-      if (bm) return bm[1];
-      const dm = c.match(/(?:[\w\[\]]+\.)+\[?(\w+)\]?$/);
-      if (dm) return dm[1];
-      return c.replace(/^\[|\]$/g, '').trim();
-    }).filter(c => c && c !== '*' && c !== '');
-
-    if (!columns.length) return null;
-    return { fullPath, tableName, alias, columns };
-  }
-
-  function generateAlias(tableName, used) {
+  function generateAlias(tableName, usedAliases) {
     const stripped = tableName.replace(/^tb_?/i, '');
     const words = stripped.match(/[A-Z][a-z0-9]*/g) || [stripped];
     let base = words.map(w => w[0].toLowerCase()).join('') || tableName.slice(0, 2).toLowerCase();
     let alias = base, n = 1;
-    while (used.has(alias)) alias = base + (n++);
+    while (usedAliases.has(alias)) alias = base + (n++);
     return alias;
   }
 
-  // ── Rendering tables ─────────────────────────────────────────────────────
+  function parseSchemas(rawText) {
+    const parsed = [];
+    const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  function renderTables() {
-    tablesEl.innerHTML = '';
-    const LINE_COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444'];
+    // Strategy 1: CREATE TABLE blocks
+    const createPositions = [];
+    const createRx = /CREATE\s+TABLE\s+/gi;
+    let m;
+    while ((m = createRx.exec(text)) !== null) createPositions.push(m.index);
 
-    tables.forEach((table, ti) => {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.style.cssText = 'margin:0;min-width:190px;max-width:260px;flex:0 0 auto;padding:10px 12px;';
-      card.dataset.tableId = table.id;
+    for (let i = 0; i < createPositions.length; i++) {
+      const block = text.slice(createPositions[i], createPositions[i + 1] || text.length);
+      const nameMatch = block.match(/CREATE\s+TABLE\s+((?:\[?[\w]+\]?\.)*\[?[\w]+\]?)/i);
+      if (!nameMatch) continue;
+      const fullPath = nameMatch[1];
+      const parts = fullPath.split('.');
+      const tableName = cleanName(parts[parts.length - 1]);
+      const inner = block.match(/\(([^]*)\)/);
+      if (!inner) continue;
 
-      const accentColor = LINE_COLORS[ti % LINE_COLORS.length];
+      const lines = inner[1].split('\n');
+      let pkCols = null;
+      for (const line of lines) {
+        const pk = line.trim().match(/PRIMARY\s+KEY\s*\(([^)]+)\)/i);
+        if (pk) pkCols = pk[1].split(',').map(s => cleanName(s));
+      }
 
-      card.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ${accentColor}">
-          <div>
-            <div style="font-weight:700;font-size:13px;font-family:var(--mono);color:${accentColor}">${escapeHtml(table.tableName)}</div>
-            <div style="font-size:11px;color:var(--text-muted)">${escapeHtml(table.alias)}</div>
-          </div>
-          <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;color:var(--text-muted);user-select:none">
-            <input type="checkbox" class="sjb-select-all" data-tid="${table.id}" checked> All
-          </label>
-        </div>
-        <div class="sjb-col-list" data-tid="${table.id}"></div>
-      `;
-
-      const colList = card.querySelector('.sjb-col-list');
-      table.columns.forEach(col => {
-        const row = document.createElement('div');
-        row.className = 'sjb-col-row';
-        row.dataset.tableId = table.id;
-        row.dataset.col = col.name;
-        row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;font-family:var(--mono);font-size:12px;border:1px solid transparent;';
-        row.innerHTML = `
-          <input type="checkbox" class="sjb-col-check" ${col.selected ? 'checked' : ''} style="cursor:pointer;flex-shrink:0">
-          <span class="sjb-col-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(col.name)}">${escapeHtml(col.name)}</span>
-          <span class="sjb-dot" title="Click to link this column" style="width:10px;height:10px;border-radius:50%;background:var(--border);flex-shrink:0;cursor:pointer;transition:background 0.15s,transform 0.15s;"></span>
-        `;
-        colList.appendChild(row);
-      });
-
-      tablesEl.appendChild(card);
-    });
-
-    attachHandlers();
-    setTimeout(redrawLines, 50);
-  }
-
-  // ── Event handlers ────────────────────────────────────────────────────────
-
-  function attachHandlers() {
-    // Column checkbox toggle (click on row area, not dot)
-    document.querySelectorAll('#sjb-tables .sjb-col-row').forEach(row => {
-      row.addEventListener('click', e => {
-        if (e.target.classList.contains('sjb-dot')) return; // handled separately
-        if (e.target.type === 'checkbox') {
-          const tid = row.dataset.tableId;
-          const col = row.dataset.col;
-          const t = tables.find(t => t.id === tid);
-          if (t) { const c = t.columns.find(c => c.name === col); if (c) c.selected = e.target.checked; }
-          return;
-        }
-        // Toggle checkbox when clicking row text
-        const cb = row.querySelector('.sjb-col-check');
-        cb.checked = !cb.checked;
-        cb.dispatchEvent(new Event('change'));
-        const tid = row.dataset.tableId;
-        const col = row.dataset.col;
-        const t = tables.find(t => t.id === tid);
-        if (t) { const c = t.columns.find(c => c.name === col); if (c) c.selected = cb.checked; }
-      });
-    });
-
-    // Select-all checkboxes
-    document.querySelectorAll('#sjb-tables .sjb-select-all').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const tid = cb.dataset.tid;
-        const t = tables.find(t => t.id === tid);
-        if (!t) return;
-        t.columns.forEach(c => c.selected = cb.checked);
-        document.querySelectorAll(`#sjb-tables [data-table-id="${tid}"] .sjb-col-check`).forEach(c => c.checked = cb.checked);
-      });
-    });
-
-    // Link dot clicks
-    document.querySelectorAll('#sjb-tables .sjb-dot').forEach(dot => {
-      dot.addEventListener('click', e => {
-        e.stopPropagation();
-        const row = dot.closest('.sjb-col-row');
-        const tid = row.dataset.tableId;
-        const col = row.dataset.col;
-
-        if (!pending) {
-          pending = { tableId: tid, col };
-          highlightPendingRow(row, true);
-          statusEl.innerHTML = `<div class="status-bar info">Click a column dot in another table to create a join — click same dot again to cancel</div>`;
-        } else if (pending.tableId === tid && pending.col === col) {
-          clearPending();
-        } else if (pending.tableId === tid) {
-          // Same table, different column — cancel + start new
-          clearPending();
-          pending = { tableId: tid, col };
-          highlightPendingRow(row, true);
-          statusEl.innerHTML = `<div class="status-bar info">Click a column dot in another table to create a join — click same dot again to cancel</div>`;
-        } else {
-          // Complete join
-          const dup = joins.find(j =>
-            (j.fromTableId === pending.tableId && j.fromCol === pending.col && j.toTableId === tid && j.toCol === col) ||
-            (j.fromTableId === tid && j.fromCol === col && j.toTableId === pending.tableId && j.toCol === pending.col)
-          );
-          if (!dup) {
-            const type = document.getElementById('sjb-default-join').value;
-            joins.push({ id: 'j' + (joinIdCtr++), fromTableId: pending.tableId, fromCol: pending.col, toTableId: tid, toCol: col, type });
-            renderJoinsList();
-            redrawLines();
-          }
-          clearPending();
-          statusEl.innerHTML = '';
-        }
-      });
-
-      // Hover hint when in pending state
-      dot.addEventListener('mouseenter', () => {
-        if (pending && dot.closest('.sjb-col-row').dataset.tableId !== pending.tableId) {
-          dot.style.background = '#10b981';
-          dot.style.transform = 'scale(1.4)';
-        }
-      });
-      dot.addEventListener('mouseleave', () => {
-        const row = dot.closest('.sjb-col-row');
-        const isSource = pending && pending.tableId === row.dataset.tableId && pending.col === row.dataset.col;
-        dot.style.background = isSource ? 'var(--accent)' : 'var(--border)';
-        dot.style.transform = isSource ? 'scale(1.3)' : '';
-      });
-    });
-  }
-
-  function highlightPendingRow(row, on) {
-    row.style.background = on ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : '';
-    row.style.borderColor = on ? 'var(--accent)' : 'transparent';
-    const dot = row.querySelector('.sjb-dot');
-    if (dot) { dot.style.background = on ? 'var(--accent)' : 'var(--border)'; dot.style.transform = on ? 'scale(1.3)' : ''; }
-  }
-
-  function clearPending() {
-    if (pending) {
-      const row = getColRow(pending.tableId, pending.col);
-      if (row) highlightPendingRow(row, false);
+      const fields = [];
+      for (const line of lines) {
+        const t = line.trim().replace(/,$/, '');
+        if (!t || /^(CONSTRAINT|INDEX|FOREIGN|UNIQUE\s*\(|CHECK\s*\(|PRIMARY\s+KEY\s*\()/i.test(t)) continue;
+        const col = t.match(/^(\[?[\w]+\]?)\s+([\w()., ]+?)\s*(?:IDENTITY[^,]*)?((?:NOT\s+NULL|NULL|PRIMARY\s+KEY|UNIQUE|DEFAULT[^,]*)*)/i);
+        if (!col) continue;
+        const colName = cleanName(col[1]);
+        if (/^(CONSTRAINT|INDEX|FOREIGN|CHECK|WITH|ON|GO)$/i.test(colName)) continue;
+        const colType = col[2].trim();
+        const rest = (col[3] || '').toUpperCase();
+        const isPK = /PRIMARY\s+KEY/i.test(t) || (pkCols && pkCols.includes(colName));
+        fields.push({ name: colName, type: colType, pk: isPK, nn: isPK || /NOT\s+NULL/.test(rest), uq: /UNIQUE/.test(rest), fk: false });
+      }
+      if (fields.length) parsed.push({ name: tableName, fullPath, fields });
     }
-    pending = null;
-    statusEl.innerHTML = '';
-  }
+    if (parsed.length) return parsed;
 
-  function getColRow(tableId, col) {
-    for (const row of document.querySelectorAll('#sjb-tables .sjb-col-row')) {
-      if (row.dataset.tableId === tableId && row.dataset.col === col) return row;
+    // Strategy 2: SELECT [col],[col] FROM [db].[schema].[table]
+    const selectChunks = text.split(/(?=\bSELECT\b)/gi).filter(s => /SELECT/i.test(s));
+    for (const chunk of selectChunks) {
+      const fromMatch = chunk.match(/FROM\s+((?:\[?[\w]+\]?\.){0,3}\[?[\w]+\]?)(?:\s+\w+\s*)?(?:$|\s+(?:WHERE|JOIN|GROUP|ORDER|INNER|LEFT|RIGHT|HAVING|UNION))/i)
+        || chunk.match(/FROM\s+((?:\[?[\w]+\]?\.){0,3}\[?[\w]+\]?)/i);
+      if (!fromMatch) continue;
+      const fullPath = fromMatch[1];
+      const tableName = cleanName(fullPath.split('.').pop());
+      if (!tableName) continue;
+
+      const colSection = chunk.match(/SELECT\s+(?:TOP\s*\(\d+\)\s*|TOP\s+\d+\s*)?([^]+?)\s+FROM\s/i);
+      if (!colSection) continue;
+
+      const fields = [];
+      for (const tok of colSection[1].split(',').map(s => s.trim()).filter(Boolean)) {
+        if (!tok || tok === '*') continue;
+        const cm = tok.match(/(?:[\w]+\.)?(\[?[\w]+\]?)(?:\s+(?:AS\s+)?\[?[\w]+\]?)?$/i);
+        if (!cm) continue;
+        const colName = cleanName(cm[1]);
+        if (!colName || /^(TOP|DISTINCT|ALL)$/i.test(colName)) continue;
+        const isPK = guessPK(colName);
+        fields.push({ name: colName, type: '', pk: isPK, nn: isPK, uq: false, fk: false });
+      }
+      if (fields.length && !parsed.find(p => p.name.toLowerCase() === tableName.toLowerCase())) {
+        parsed.push({ name: tableName, fullPath, fields });
+      }
     }
-    return null;
+    if (parsed.length) return parsed;
+
+    // Strategy 3: Plain column list
+    const fieldLines = text.split('\n').map(l => l.trim()).filter(l =>
+      l && !/^(SELECT|FROM|WHERE|CREATE|ALTER|GO|--)/i.test(l)
+    );
+    const fields = [];
+    for (const line of fieldLines) {
+      const mm = line.replace(/,/g, '').match(/^(\[?[\w]+\]?)(?:\s+([\w().,]+))?/);
+      if (!mm) continue;
+      const colName = cleanName(mm[1]);
+      if (!colName || /^(SELECT|FROM|WHERE|JOIN|ON|AS|TOP|DISTINCT)$/i.test(colName)) continue;
+      fields.push({ name: colName, type: mm[2] || '', pk: guessPK(colName), nn: false, uq: false, fk: false });
+    }
+    if (fields.length) return [{ name: 'Table' + (tables.length + 1), fullPath: 'Table' + (tables.length + 1), fields }];
+    return [];
   }
 
-  // ── Joins list ────────────────────────────────────────────────────────────
+  // ── ADD TABLES ────────────────────────────────────────────────────────────
 
-  function renderJoinsList() {
-    if (!joins.length) { joinsCardEl.style.display = 'none'; return; }
-    joinsCardEl.style.display = '';
-    joinsListEl.innerHTML = joins.map(j => {
-      const ft = tables.find(t => t.id === j.fromTableId);
-      const tt = tables.find(t => t.id === j.toTableId);
-      return `
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-          <select class="sjb-join-type" data-jid="${j.id}" style="font-size:12px;padding:2px 6px">
-            <option value="INNER"${j.type==='INNER'?' selected':''}>INNER</option>
-            <option value="LEFT"${j.type==='LEFT'?' selected':''}>LEFT</option>
-            <option value="RIGHT"${j.type==='RIGHT'?' selected':''}>RIGHT</option>
-            <option value="FULL"${j.type==='FULL'?' selected':''}>FULL OUTER</option>
-          </select>
-          <span style="font-family:var(--mono);font-size:12px;flex:1">
-            <b style="color:var(--accent)">${escapeHtml(ft?.tableName||'')}</b>.[${escapeHtml(j.fromCol)}]
-            &nbsp;=&nbsp;
-            <b style="color:var(--accent)">${escapeHtml(tt?.tableName||'')}</b>.[${escapeHtml(j.toCol)}]
-          </span>
-          <button class="btn btn-ghost btn-sm sjb-rm-join" data-jid="${j.id}" style="padding:1px 7px;font-size:12px">✕</button>
-        </div>`;
-    }).join('');
-
-    joinsListEl.querySelectorAll('.sjb-join-type').forEach(sel => {
-      sel.addEventListener('change', () => {
-        const j = joins.find(j => j.id === sel.dataset.jid);
-        if (j) { j.type = sel.value; redrawLines(); }
+  function addParsedTables(parsed) {
+    const usedAliases = new Set(tables.map(t => t.alias));
+    parsed.forEach((p, i) => {
+      const existing = tables.find(t => t.name === p.name);
+      if (existing) { existing.fields = p.fields; existing.fullPath = p.fullPath || existing.fullPath; renderTableCard(existing); return; }
+      const idx = tables.length;
+      const cols = Math.max(1, Math.ceil(Math.sqrt(parsed.length + tables.length + 1)));
+      const alias = generateAlias(p.name, usedAliases);
+      usedAliases.add(alias);
+      tables.push({
+        id: 'sjbt_' + Date.now() + '_' + idx,
+        name: p.name, fullPath: p.fullPath,
+        alias, fields: p.fields,
+        x: 20 + (idx % cols) * 240,
+        y: 20 + Math.floor(idx / cols) * 220,
+        color: COLORS[idx % COLORS.length]
       });
     });
-    joinsListEl.querySelectorAll('.sjb-rm-join').forEach(btn => {
-      btn.addEventListener('click', () => {
-        joins = joins.filter(j => j.id !== btn.dataset.jid);
-        renderJoinsList();
-        redrawLines();
-      });
-    });
+    workspaceEl.style.display = '';
+    tables.forEach(t => renderTableCard(t));
+    renderRelations();
+    updateStatus();
   }
 
-  // ── SVG lines ─────────────────────────────────────────────────────────────
+  // ── RENDER TABLE CARD ─────────────────────────────────────────────────────
 
-  function redrawLines() {
-    svgEl.innerHTML = '';
-    const tablesH = tablesEl.getBoundingClientRect().height;
-    const h = Math.max(tablesH + 24, 200);
-    canvasEl.style.minHeight = h + 'px';
-    svgEl.setAttribute('height', h);
+  function renderTableCard(t) {
+    let card = document.getElementById(t.id);
+    if (!card) {
+      card = document.createElement('div');
+      card.id = t.id;
+      card.className = 'sjb-table-card';
+      tablesCanvas.appendChild(card);
+    }
+    card.style.left = t.x + 'px';
+    card.style.top  = t.y + 'px';
 
-    const LINE_COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444'];
-    const canvasRect = canvasEl.getBoundingClientRect();
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:7px;padding:8px 10px;background:${t.color}18;border-radius:7px 7px 0 0;cursor:grab;border-bottom:1px solid var(--border)" data-drag="${t.id}">
+        <div style="width:18px;height:18px;background:linear-gradient(135deg,${t.color},${t.color}88);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px">⬡</div>
+        <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:${t.color};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.name}">${t.name}</span>
+        <span style="font-size:10px;color:var(--text-muted);font-family:var(--mono);flex-shrink:0">${t.alias}</span>
+        <button data-action="delete-table" data-table-id="${t.id}" style="width:18px;height:18px;background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:15px;line-height:1;border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0" title="Delete table">×</button>
+      </div>
+      <div style="padding:3px 0">
+        ${t.fields.map(f => {
+          const isFk = relations.some(r => r.fromTable === t.name && r.fromField === f.name);
+          const dotCls = f.pk ? 'sjb-dot pk' : (isFk ? 'sjb-dot fk' : 'sjb-dot');
+          return `<div class="sjb-field-row" data-action="connect-field" data-table-name="${t.name}" data-field-name="${f.name}">
+            <div class="${dotCls}"></div>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)" title="${f.name}">${f.name}</span>
+            <div style="display:flex;gap:2px;flex-shrink:0">
+              ${f.pk  ? '<span class="sjb-badge pk">PK</span>' : ''}
+              ${isFk  ? '<span class="sjb-badge fk">FK</span>' : ''}
+              ${f.nn && !f.pk ? '<span class="sjb-badge nn">NN</span>' : ''}
+              ${f.uq  ? '<span class="sjb-badge uq">UQ</span>' : ''}
+            </div>
+            ${f.type ? `<span style="font-size:10px;color:var(--text-muted);margin-left:4px;flex-shrink:0;font-family:var(--mono)">${f.type.slice(0,14)}</span>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+  }
 
-    joins.forEach((join, i) => {
-      const fromRow = getColRow(join.fromTableId, join.fromCol);
-      const toRow   = getColRow(join.toTableId, join.toCol);
-      if (!fromRow || !toRow) return;
+  // ── DRAG ──────────────────────────────────────────────────────────────────
 
-      const fromDot = fromRow.querySelector('.sjb-dot');
-      const toDot   = toRow.querySelector('.sjb-dot');
-      if (!fromDot || !toDot) return;
+  tablesCanvas.addEventListener('mousedown', e => {
+    const header = e.target.closest('[data-drag]');
+    if (!header || e.target.dataset.action === 'delete-table') return;
+    const t = tables.find(x => x.id === header.dataset.drag);
+    if (!t) return;
+    dragging = { tableId: t.id, t, ox: e.clientX - t.x, oy: e.clientY - t.y };
+    document.getElementById(t.id).style.zIndex = '100';
+    e.preventDefault();
+  });
 
-      const fr = fromDot.getBoundingClientRect();
-      const tr = toDot.getBoundingClientRect();
-      const cx = canvasRect.left;
-      const cy = canvasRect.top;
+  document.addEventListener('mousemove', e => {
+    if (!dragging || !document.getElementById('sjb-canvas-wrap')) { dragging = null; return; }
+    dragging.t.x = Math.max(0, e.clientX - dragging.ox);
+    dragging.t.y = Math.max(0, e.clientY - dragging.oy);
+    const card = document.getElementById(dragging.tableId);
+    if (card) { card.style.left = dragging.t.x + 'px'; card.style.top = dragging.t.y + 'px'; }
+    renderRelations();
+  });
 
-      const x1 = fr.left + fr.width / 2 - cx;
-      const y1 = fr.top  + fr.height / 2 - cy;
-      const x2 = tr.left + tr.width / 2 - cx;
-      const y2 = tr.top  + tr.height / 2 - cy;
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    const card = document.getElementById(dragging.tableId);
+    if (card) card.style.zIndex = '';
+    dragging = null;
+  });
 
-      const color = LINE_COLORS[i % LINE_COLORS.length];
-      const cpx = Math.abs(x2 - x1) * 0.55;
-      const dash = join.type !== 'INNER' ? '6,3' : 'none';
+  // ── CONNECT / RELATIONS ───────────────────────────────────────────────────
+
+  tablesCanvas.addEventListener('click', e => {
+    const delBtn = e.target.closest('[data-action="delete-table"]');
+    if (delBtn) { e.stopPropagation(); deleteTableById(delBtn.dataset.tableId); return; }
+
+    const fieldRow = e.target.closest('[data-action="connect-field"]');
+    if (!fieldRow) return;
+    const tableName = fieldRow.dataset.tableName;
+    const fieldName = fieldRow.dataset.fieldName;
+
+    if (!connectMode) {
+      connectMode = true;
+      connectSource = { tableName, fieldName };
+      connectBanner.style.display = 'block';
+      statusMode.textContent = `Linking: ${tableName}.${fieldName}`;
+      document.querySelectorAll('#sjb-tables-canvas .sjb-field-row').forEach(r => {
+        if (r.dataset.tableName === tableName && r.dataset.fieldName === fieldName) r.classList.add('sjb-connecting');
+        else if (r.dataset.tableName !== tableName) r.classList.add('sjb-connect-target');
+      });
+    } else {
+      if (connectSource.tableName === tableName) { cancelConnect(); return; }
+      addRelation(connectSource.tableName, connectSource.fieldName, tableName, fieldName);
+      cancelConnect();
+    }
+  });
+
+  function cancelConnect() {
+    connectMode = false; connectSource = null;
+    connectBanner.style.display = 'none';
+    statusMode.textContent = '';
+    document.querySelectorAll('#sjb-tables-canvas .sjb-field-row').forEach(r =>
+      r.classList.remove('sjb-connecting', 'sjb-connect-target')
+    );
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && connectMode) cancelConnect(); });
+
+  function addRelation(fromTable, fromField, toTable, toField) {
+    if (relations.some(r => r.fromTable===fromTable && r.fromField===fromField && r.toTable===toTable && r.toField===toField)) return;
+    relations.push({ id: 'rel_'+(relIdCtr++), fromTable, fromField, toTable, toField });
+    [fromTable, toTable].forEach(n => { const t = tables.find(x=>x.name===n); if(t) renderTableCard(t); });
+    renderRelations(); updateOutput(); updateStatus();
+  }
+
+  function deleteRelation(relId) {
+    const r = relations.find(x => x.id === relId);
+    relations = relations.filter(x => x.id !== relId);
+    if (r) [r.fromTable, r.toTable].forEach(n => { const t=tables.find(x=>x.name===n); if(t) renderTableCard(t); });
+    renderRelations(); updateOutput(); updateStatus();
+  }
+
+  function deleteTableById(tableId) {
+    const t = tables.find(x => x.id === tableId);
+    if (!t) return;
+    relations = relations.filter(r => r.fromTable!==t.name && r.toTable!==t.name);
+    tables = tables.filter(x => x.id !== tableId);
+    document.getElementById(tableId)?.remove();
+    renderRelations(); updateOutput(); updateStatus();
+  }
+
+  // ── SVG RELATIONS ─────────────────────────────────────────────────────────
+
+  function renderRelations() {
+    svgEl.innerHTML = `<defs>
+      <marker id="sjb-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L7,3 z" fill="#4f8ef7" opacity="0.8"/>
+      </marker>
+    </defs>`;
+
+    relations.forEach((rel, idx) => {
+      const fromT = tables.find(t => t.name === rel.fromTable);
+      const toT   = tables.find(t => t.name === rel.toTable);
+      if (!fromT || !toT) return;
+      const fromCard = document.getElementById(fromT.id);
+      const toCard   = document.getElementById(toT.id);
+      if (!fromCard || !toCard) return;
+
+      const fiIdx = fromT.fields.findIndex(f => f.name === rel.fromField);
+      const tiIdx = toT.fields.findIndex(f => f.name === rel.toField);
+      if (fiIdx === -1 || tiIdx === -1) return;
+
+      const y1 = fromT.y + HEADER_H + fiIdx * FIELD_H + FIELD_H / 2;
+      const y2 = toT.y   + HEADER_H + tiIdx * FIELD_H + FIELD_H / 2;
+      const fromMidX = fromT.x + fromCard.offsetWidth / 2;
+      const toMidX   = toT.x   + toCard.offsetWidth   / 2;
+
+      const x1 = fromMidX <= toMidX ? fromT.x + fromCard.offsetWidth : fromT.x;
+      const x2 = fromMidX <= toMidX ? toT.x                          : toT.x + toCard.offsetWidth;
+
+      const dx = Math.abs(x2 - x1) * 0.5;
+      const pathD = `M ${x1} ${y1} C ${x1+(x1<x2?dx:-dx)} ${y1}, ${x2+(x1<x2?-dx:dx)} ${y2}, ${x2} ${y2}`;
+      const color = COLORS[idx % COLORS.length];
+      const mx = (x1+x2)/2, my = (y1+y2)/2;
+      const labelText = `${rel.fromField} → ${rel.toField}`;
+      const lw = Math.min(labelText.length * 6 + 8, 140);
+
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.style.cursor = 'pointer';
+
+      const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      hit.setAttribute('d', pathD); hit.setAttribute('stroke', 'transparent');
+      hit.setAttribute('stroke-width', '14'); hit.setAttribute('fill', 'none');
 
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', `M ${x1} ${y1} C ${x1 + cpx} ${y1}, ${x2 - cpx} ${y2}, ${x2} ${y2}`);
-      path.setAttribute('stroke', color);
-      path.setAttribute('stroke-width', '2');
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke-dasharray', dash);
-      path.setAttribute('opacity', '0.85');
-      svgEl.appendChild(path);
+      path.setAttribute('d', pathD); path.setAttribute('stroke', color);
+      path.setAttribute('stroke-width', '1.5'); path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-opacity', '0.7'); path.setAttribute('marker-end', 'url(#sjb-arrow)');
 
-      // Endpoint dots
-      [[x1, y1], [x2, y2]].forEach(([ex, ey]) => {
-        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        c.setAttribute('cx', ex); c.setAttribute('cy', ey); c.setAttribute('r', '4');
-        c.setAttribute('fill', color);
-        svgEl.appendChild(c);
+      const lbg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      lbg.setAttribute('x', mx-lw/2); lbg.setAttribute('y', my-9);
+      lbg.setAttribute('width', lw); lbg.setAttribute('height', 16);
+      lbg.setAttribute('rx', '4');
+      lbg.setAttribute('style', 'fill:var(--bg)'); lbg.setAttribute('opacity', '0.92');
+
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('x', mx); lbl.setAttribute('y', my+3);
+      lbl.setAttribute('text-anchor', 'middle'); lbl.setAttribute('font-size', '10');
+      lbl.setAttribute('font-family', 'monospace');
+      lbl.setAttribute('style', 'fill:var(--text-muted)');
+      lbl.textContent = labelText;
+
+      g.appendChild(hit); g.appendChild(path); g.appendChild(lbg); g.appendChild(lbl);
+      g.addEventListener('mouseenter', () => { path.setAttribute('stroke-opacity','1'); path.setAttribute('stroke-width','2.5'); });
+      g.addEventListener('mouseleave', () => { path.setAttribute('stroke-opacity','0.7'); path.setAttribute('stroke-width','1.5'); });
+      g.addEventListener('click', () => {
+        if (confirm(`Delete relation: ${rel.fromTable}.${rel.fromField} → ${rel.toTable}.${rel.toField}?`))
+          deleteRelation(rel.id);
       });
-
-      // Label at midpoint
-      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-      const label = join.type === 'FULL' ? 'FULL' : join.type;
-      const lw = label.length * 6 + 8;
-      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      bg.setAttribute('x', mx - lw / 2); bg.setAttribute('y', my - 9);
-      bg.setAttribute('width', lw); bg.setAttribute('height', 16);
-      bg.setAttribute('rx', '4'); bg.setAttribute('fill', color); bg.setAttribute('opacity', '0.95');
-      svgEl.appendChild(bg);
-      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      txt.setAttribute('x', mx); txt.setAttribute('y', my + 2);
-      txt.setAttribute('text-anchor', 'middle'); txt.setAttribute('dominant-baseline', 'middle');
-      txt.setAttribute('font-size', '9'); txt.setAttribute('font-family', 'monospace');
-      txt.setAttribute('fill', 'white'); txt.textContent = label;
-      svgEl.appendChild(txt);
+      svgEl.appendChild(g);
     });
   }
 
-  // ── SQL generation ────────────────────────────────────────────────────────
+  // ── OUTPUT TABS ───────────────────────────────────────────────────────────
 
-  function generateSQL() {
-    if (!tables.length) return '';
+  document.querySelectorAll('#sjb-workspace .sjb-tab').forEach(tab =>
+    tab.addEventListener('click', () => {
+      currentTab = tab.dataset.tab;
+      document.querySelectorAll('#sjb-workspace .sjb-tab').forEach(t => t.classList.toggle('sjb-active', t === tab));
+      updateOutput();
+    })
+  );
+
+  outputBody.addEventListener('click', e => {
+    const delBtn = e.target.closest('[data-action="delete-relation"]');
+    if (delBtn) deleteRelation(delBtn.dataset.relId);
+  });
+
+  function updateOutput() {
+    if (!relations.length) {
+      outputBody.innerHTML = `<div style="text-align:center;padding:32px 12px;color:var(--text-muted);font-size:12px;line-height:1.7">Connect fields between tables<br>to see output here</div>`;
+      return;
+    }
+    if (currentTab === 'relations') renderRelationsList();
+    else if (currentTab === 'fk')   renderFKScript();
+    else                             renderJoinScript();
+  }
+
+  function renderRelationsList() {
+    outputBody.innerHTML = relations.map(r => `
+      <div class="sjb-rel-item">
+        <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);margin-bottom:3px">${r.fromTable}.${r.fromField} → ${r.toTable}.${r.toField}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px"><b style="color:var(--text)">${r.fromTable}</b> (FK: ${r.fromField}) → <b style="color:var(--text)">${r.toTable}</b> (PK: ${r.toField})</div>
+        <button data-action="delete-relation" data-rel-id="${r.id}" style="font-size:11px;color:#e05252;cursor:pointer;background:none;border:none;padding:0">✕ Remove</button>
+      </div>
+    `).join('');
+  }
+
+  function syntaxHL(code) {
+    return code
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\b(SELECT|FROM|INNER JOIN|LEFT JOIN|RIGHT JOIN|FULL OUTER JOIN|ON|WHERE|ALTER TABLE|ADD CONSTRAINT|FOREIGN KEY|REFERENCES|GO|AS|ORDER BY|GROUP BY|NOT NULL|PRIMARY KEY)\b/gi, '<span class="sjb-kw">$&</span>')
+      .replace(/(\[[^\]]+\])/g, '<span class="sjb-tb">$1</span>')
+      .replace(/(--[^\n]*)/g, '<span class="sjb-cm">$1</span>');
+  }
+
+  function renderFKScript() {
+    const script = relations.map((r, i) => {
+      const fkName = `FK_${r.fromTable}_${r.toTable}_${r.fromField}`;
+      return `-- Relation ${i+1}: ${r.fromTable}.${r.fromField} → ${r.toTable}.${r.toField}
+ALTER TABLE [dbo].[${r.fromTable}]
+  ADD CONSTRAINT [${fkName}]
+  FOREIGN KEY ([${r.fromField}])
+  REFERENCES [dbo].[${r.toTable}] ([${r.toField}])
+  ON DELETE NO ACTION
+  ON UPDATE NO ACTION;
+GO`;
+    }).join('\n\n');
+    const copyId = registerCopy(script);
+    outputBody.innerHTML = `
+      <button class="sjb-copy-btn" onclick="copyFromRegistry('${copyId}')">⧉ Copy</button>
+      <pre class="sjb-code-block">${syntaxHL(script)}</pre>`;
+  }
+
+  function renderJoinScript() {
+    if (!tables.length) return;
     const main = tables[0];
-    const mainAlias = main.alias;
-
-    // SELECT columns
-    const selCols = [];
-    tables.forEach(t => {
-      t.columns.filter(c => c.selected).forEach(c => {
-        selCols.push(`    ${t.alias}.[${c.name}]`);
-      });
-    });
-    if (!selCols.length) return '-- No columns selected';
-
-    let sql = `SELECT TOP (1000)\n${selCols.join(',\n')}\nFROM ${main.fullPath} ${mainAlias}\n`;
-
-    // Add JOINs — chain from already-added tables
-    const added = new Set([main.id]);
-    const queue = [...joins];
+    const added = new Set([main.name]);
+    const joinLines = [];
+    const queue = [...relations];
     let pass = 0;
-    while (queue.length && pass < joins.length * 2) {
-      const j = queue.shift();
-      const fromAdded = added.has(j.fromTableId);
-      const toAdded   = added.has(j.toTableId);
-      if (!fromAdded && !toAdded) { queue.push(j); pass++; continue; }
-      if (fromAdded && toAdded)   continue; // already connected
 
-      const [anchorId, newId, anchorCol, newCol] = fromAdded
-        ? [j.fromTableId, j.toTableId, j.fromCol, j.toCol]
-        : [j.toTableId, j.fromTableId, j.toCol, j.fromCol];
-
-      const anchorT = tables.find(t => t.id === anchorId);
-      const newT    = tables.find(t => t.id === newId);
+    while (queue.length && pass < relations.length * 2) {
+      const r = queue.shift();
+      const fa = added.has(r.fromTable), ta = added.has(r.toTable);
+      if (!fa && !ta) { queue.push(r); pass++; continue; }
+      if (fa && ta) continue;
+      const [anchorName, newName, anchorCol, newCol] = fa
+        ? [r.fromTable, r.toTable, r.fromField, r.toField]
+        : [r.toTable,   r.fromTable, r.toField, r.fromField];
+      const anchorT = tables.find(t => t.name === anchorName);
+      const newT    = tables.find(t => t.name === newName);
       if (!newT) continue;
-
-      const kw = j.type === 'FULL' ? 'FULL OUTER JOIN' : `${j.type} JOIN`;
-      sql += `${kw} ${newT.fullPath} ${newT.alias}\n    ON ${anchorT.alias}.[${anchorCol}] = ${newT.alias}.[${newCol}]\n`;
-      added.add(newId);
-      pass = 0;
+      joinLines.push(`INNER JOIN ${newT.fullPath} ${newT.alias}\n    ON ${anchorT.alias}.[${anchorCol}] = ${newT.alias}.[${newCol}]`);
+      added.add(newName); pass = 0;
     }
 
-    const firstCol = main.columns[0]?.name || 'id';
-    sql += `ORDER BY ${mainAlias}.[${firstCol}];`;
-    return sql;
+    const colLines = tables.filter(t => added.has(t.name))
+      .flatMap(t => t.fields.map(f => `    ${t.alias}.[${f.name}]`));
+    const firstCol = main.fields[0]?.name || 'id';
+    const sql = `SELECT TOP (1000)\n${colLines.join(',\n')}\nFROM ${main.fullPath} ${main.alias}\n${joinLines.join('\n')}\nORDER BY ${main.alias}.[${firstCol}];`;
+
+    const copyId = registerCopy(sql);
+    outputBody.innerHTML = `
+      <button class="sjb-copy-btn" onclick="copyFromRegistry('${copyId}')">⧉ Copy</button>
+      <pre class="sjb-code-block">${syntaxHL(sql)}</pre>`;
   }
 
-  // ── Button wiring ─────────────────────────────────────────────────────────
+  // ── STATUS & BUTTONS ──────────────────────────────────────────────────────
+
+  function updateStatus() {
+    statusTables.textContent = `${tables.length} table${tables.length!==1?'s':''}`;
+    statusRels.textContent   = `${relations.length} relation${relations.length!==1?'s':''}`;
+  }
 
   document.getElementById('sjb-parse').addEventListener('click', () => {
-    const input = document.getElementById('sjb-input').value;
-    const queries = splitQueries(input);
-    if (!queries.length) {
-      statusEl.innerHTML = '<div class="status-bar error">No SELECT statements found</div>';
-      return;
-    }
-
-    const usedAliases = new Set();
-    const parsed = [];
-    queries.forEach((q, i) => {
-      const r = parseSqlSelect(q);
-      if (!r) return;
-      if (!r.alias) r.alias = generateAlias(r.tableName, usedAliases);
-      usedAliases.add(r.alias);
-      parsed.push({ id: 't' + i, ...r, columns: r.columns.map(name => ({ name, selected: true })) });
-    });
-
+    const text = document.getElementById('sjb-input').value.trim();
+    if (!text) return;
+    const parsed = parseSchemas(text);
     if (!parsed.length) {
-      statusEl.innerHTML = '<div class="status-bar error">Could not parse any tables — check your SQL format</div>';
+      parseStatus.innerHTML = '<div class="status-bar error">Could not parse any tables — try CREATE TABLE or SELECT ... FROM format</div>';
       return;
     }
-
-    tables  = parsed;
-    joins   = [];
-    pending = null;
-
-    editorEl.style.display = '';
-    joinsCardEl.style.display = 'none';
-    outputCardEl.style.display = 'none';
-    statusEl.innerHTML = `<div class="status-bar success">✓ Parsed ${tables.length} table${tables.length > 1 ? 's' : ''}</div>`;
-    renderTables();
-  });
-
-  document.getElementById('sjb-clear-input').addEventListener('click', () => {
+    addParsedTables(parsed);
     document.getElementById('sjb-input').value = '';
-    editorEl.style.display = 'none';
-    statusEl.innerHTML = '';
-    tables = []; joins = []; pending = null;
+    parseStatus.innerHTML = `<div class="status-bar success">✓ Added ${parsed.length} table${parsed.length!==1?'s':''}</div>`;
   });
 
-  document.getElementById('sjb-clear-joins').addEventListener('click', () => {
-    joins = []; pending = null;
-    renderJoinsList();
-    redrawLines();
-    outputCardEl.style.display = 'none';
-    statusEl.innerHTML = '';
-  });
-
-  document.getElementById('sjb-generate').addEventListener('click', () => {
-    const sql = generateSQL();
-    outputEl.value = sql;
-    outputCardEl.style.display = '';
-    outputEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  });
-
-  document.getElementById('sjb-copy').addEventListener('click', () => {
-    if (outputEl.value) copyToClipboard(outputEl.value);
-  });
-
-  window.addEventListener('resize', () => {
-    if (editorEl.style.display !== 'none') redrawLines();
+  document.getElementById('sjb-clear-all').addEventListener('click', () => {
+    if (tables.length && !confirm('Clear all tables and relations?')) return;
+    tables = []; relations = [];
+    tablesCanvas.innerHTML = '';
+    renderRelations(); updateOutput(); updateStatus();
+    workspaceEl.style.display = 'none';
+    parseStatus.innerHTML = '';
+    cancelConnect();
   });
 }
