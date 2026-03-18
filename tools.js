@@ -263,6 +263,15 @@ const TOOLS = [
     render: renderJsonToClass,
     init: initJsonToClass,
   },
+  {
+    id: 'sql-join-builder',
+    name: 'SQL Join Builder',
+    icon: '⋈',
+    category: 'Data',
+    desc: 'Paste SQL schemas, draw column relations visually, generate JOIN queries',
+    render: renderSqlJoinBuilder,
+    init: initSqlJoinBuilder,
+  },
 ];
 
 // =====================
@@ -3317,5 +3326,543 @@ function initJsonToClass() {
 
   document.getElementById('j2c-copy').addEventListener('click', () => {
     if (output.value) copyToClipboard(output.value);
+  });
+}
+
+// =====================
+// 29. SQL Join Builder
+// =====================
+function renderSqlJoinBuilder() {
+  return `
+    <div class="card" id="sjb-input-card">
+      <label class="field-label">SQL SELECT Statements (one per table)</label>
+      <textarea class="mono" id="sjb-input" rows="10" placeholder="Paste multiple SELECT queries here. Example:
+
+SELECT TOP (1000) [ColA], [ColB]
+  FROM [DB].[dbo].[TableOne]
+
+SELECT TOP (1000) [ColA], [ColC]
+  FROM [DB].[dbo].[TableTwo] t2"></textarea>
+      <div class="btn-group" style="margin-top:12px">
+        <button class="btn" id="sjb-parse">Parse Tables</button>
+        <button class="btn btn-ghost" id="sjb-clear-input">Clear</button>
+      </div>
+      <div id="sjb-parse-status"></div>
+    </div>
+
+    <div id="sjb-editor" style="display:none">
+      <div class="card" style="padding:12px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div class="card-title" style="margin:0">Visual Join Builder</div>
+          <div style="font-size:12px;color:var(--text-muted)">
+            Click the <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--text-muted);vertical-align:middle"></span> dot on a column, then click a column in another table to link them
+          </div>
+        </div>
+        <div id="sjb-canvas" style="position:relative;min-height:200px;overflow:visible">
+          <svg id="sjb-svg" style="position:absolute;top:0;left:0;width:100%;pointer-events:none;overflow:visible;z-index:1"></svg>
+          <div id="sjb-tables" style="display:flex;gap:20px;flex-wrap:wrap;position:relative;z-index:2;padding-bottom:8px"></div>
+        </div>
+      </div>
+
+      <div class="card" id="sjb-joins-card" style="display:none">
+        <div class="card-title">Configured Joins</div>
+        <div id="sjb-joins-list"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+          <div>
+            <label class="field-label">Default Join Type</label>
+            <select id="sjb-default-join">
+              <option value="INNER">INNER JOIN</option>
+              <option value="LEFT">LEFT JOIN</option>
+              <option value="RIGHT">RIGHT JOIN</option>
+              <option value="FULL">FULL OUTER JOIN</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="sjb-generate">Generate SQL</button>
+            <button class="btn btn-ghost" id="sjb-clear-joins">Clear Joins</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sjb-output-card" class="card" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <label class="field-label" style="margin:0">Generated SQL</label>
+          <button class="btn btn-sm" id="sjb-copy">Copy</button>
+        </div>
+        <textarea class="mono" id="sjb-output" rows="14" readonly placeholder="Generated SQL will appear here..."></textarea>
+      </div>
+    </div>
+  `;
+}
+
+function initSqlJoinBuilder() {
+  let tables  = [];   // [{id, fullPath, tableName, alias, columns:[{name,selected}]}]
+  let joins   = [];   // [{id, fromTableId, fromCol, toTableId, toCol, type}]
+  let pending = null; // {tableId, col} — waiting for second click
+  let joinIdCtr = 0;
+
+  const statusEl    = document.getElementById('sjb-parse-status');
+  const editorEl    = document.getElementById('sjb-editor');
+  const tablesEl    = document.getElementById('sjb-tables');
+  const svgEl       = document.getElementById('sjb-svg');
+  const canvasEl    = document.getElementById('sjb-canvas');
+  const joinsCardEl = document.getElementById('sjb-joins-card');
+  const joinsListEl = document.getElementById('sjb-joins-list');
+  const outputCardEl = document.getElementById('sjb-output-card');
+  const outputEl    = document.getElementById('sjb-output');
+
+  // ── Parsing ──────────────────────────────────────────────────────────────
+
+  function splitQueries(sql) {
+    const lines = sql.split('\n');
+    const parts = [];
+    let current = [];
+    for (const line of lines) {
+      if (current.length > 0 && /^\s*SELECT\b/i.test(line)) {
+        parts.push(current.join('\n'));
+        current = [line];
+      } else if (/^\s*;\s*$/.test(line)) {
+        if (current.length) { parts.push(current.join('\n')); current = []; }
+      } else {
+        current.push(line);
+      }
+    }
+    if (current.length) parts.push(current.join('\n'));
+    return parts.filter(p => /SELECT/i.test(p));
+  }
+
+  function parseSqlSelect(query) {
+    query = query.trim()
+      .replace(/--[^\n]*/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+
+    // Extract FROM clause (everything up to WHERE / ORDER / GROUP / HAVING or end)
+    const fromMatch = query.match(/\bFROM\b([\s\S]+?)(?=\bWHERE\b|\bORDER\s+BY\b|\bGROUP\s+BY\b|\bHAVING\b|$)/i);
+    if (!fromMatch) return null;
+    const fromClause = fromMatch[1].trim();
+
+    // Table reference: [db].[schema].[table] or db.schema.table, optional alias
+    const tableRx = /^((?:\[[\w\s]+\]\.)*\[[\w\s]+\]|(?:[\w]+\.)*[\w]+)\s*(?:AS\s+)?(\w+)?\s*$/i;
+    const tMatch = fromClause.match(tableRx);
+    if (!tMatch) return null;
+
+    const fullPath = tMatch[1].trim();
+    const alias    = tMatch[2] || null;
+    const shortM   = fullPath.match(/\[([^\]]+)\]\s*$/) || fullPath.match(/(\w+)$/);
+    const tableName = shortM ? shortM[1] : fullPath;
+
+    // Extract SELECT columns (between SELECT and FROM)
+    const selMatch = query.match(/\bSELECT\b([\s\S]+?)\bFROM\b/i);
+    if (!selMatch) return null;
+
+    const colStr = selMatch[1].trim().replace(/^TOP\s*\(\d+\)\s*/i, '');
+    const columns = colStr.split(',').map(c => {
+      c = c.trim();
+      const bm = c.match(/\[([^\]]+)\]\s*$/);
+      if (bm) return bm[1];
+      const dm = c.match(/(?:[\w\[\]]+\.)+\[?(\w+)\]?$/);
+      if (dm) return dm[1];
+      return c.replace(/^\[|\]$/g, '').trim();
+    }).filter(c => c && c !== '*' && c !== '');
+
+    if (!columns.length) return null;
+    return { fullPath, tableName, alias, columns };
+  }
+
+  function generateAlias(tableName, used) {
+    const stripped = tableName.replace(/^tb_?/i, '');
+    const words = stripped.match(/[A-Z][a-z0-9]*/g) || [stripped];
+    let base = words.map(w => w[0].toLowerCase()).join('') || tableName.slice(0, 2).toLowerCase();
+    let alias = base, n = 1;
+    while (used.has(alias)) alias = base + (n++);
+    return alias;
+  }
+
+  // ── Rendering tables ─────────────────────────────────────────────────────
+
+  function renderTables() {
+    tablesEl.innerHTML = '';
+    const LINE_COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444'];
+
+    tables.forEach((table, ti) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'margin:0;min-width:190px;max-width:260px;flex:0 0 auto;padding:10px 12px;';
+      card.dataset.tableId = table.id;
+
+      const accentColor = LINE_COLORS[ti % LINE_COLORS.length];
+
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ${accentColor}">
+          <div>
+            <div style="font-weight:700;font-size:13px;font-family:var(--mono);color:${accentColor}">${escapeHtml(table.tableName)}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${escapeHtml(table.alias)}</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;color:var(--text-muted);user-select:none">
+            <input type="checkbox" class="sjb-select-all" data-tid="${table.id}" checked> All
+          </label>
+        </div>
+        <div class="sjb-col-list" data-tid="${table.id}"></div>
+      `;
+
+      const colList = card.querySelector('.sjb-col-list');
+      table.columns.forEach(col => {
+        const row = document.createElement('div');
+        row.className = 'sjb-col-row';
+        row.dataset.tableId = table.id;
+        row.dataset.col = col.name;
+        row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;font-family:var(--mono);font-size:12px;border:1px solid transparent;';
+        row.innerHTML = `
+          <input type="checkbox" class="sjb-col-check" ${col.selected ? 'checked' : ''} style="cursor:pointer;flex-shrink:0">
+          <span class="sjb-col-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(col.name)}">${escapeHtml(col.name)}</span>
+          <span class="sjb-dot" title="Click to link this column" style="width:10px;height:10px;border-radius:50%;background:var(--border);flex-shrink:0;cursor:pointer;transition:background 0.15s,transform 0.15s;"></span>
+        `;
+        colList.appendChild(row);
+      });
+
+      tablesEl.appendChild(card);
+    });
+
+    attachHandlers();
+    setTimeout(redrawLines, 50);
+  }
+
+  // ── Event handlers ────────────────────────────────────────────────────────
+
+  function attachHandlers() {
+    // Column checkbox toggle (click on row area, not dot)
+    document.querySelectorAll('#sjb-tables .sjb-col-row').forEach(row => {
+      row.addEventListener('click', e => {
+        if (e.target.classList.contains('sjb-dot')) return; // handled separately
+        if (e.target.type === 'checkbox') {
+          const tid = row.dataset.tableId;
+          const col = row.dataset.col;
+          const t = tables.find(t => t.id === tid);
+          if (t) { const c = t.columns.find(c => c.name === col); if (c) c.selected = e.target.checked; }
+          return;
+        }
+        // Toggle checkbox when clicking row text
+        const cb = row.querySelector('.sjb-col-check');
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+        const tid = row.dataset.tableId;
+        const col = row.dataset.col;
+        const t = tables.find(t => t.id === tid);
+        if (t) { const c = t.columns.find(c => c.name === col); if (c) c.selected = cb.checked; }
+      });
+    });
+
+    // Select-all checkboxes
+    document.querySelectorAll('#sjb-tables .sjb-select-all').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const tid = cb.dataset.tid;
+        const t = tables.find(t => t.id === tid);
+        if (!t) return;
+        t.columns.forEach(c => c.selected = cb.checked);
+        document.querySelectorAll(`#sjb-tables [data-table-id="${tid}"] .sjb-col-check`).forEach(c => c.checked = cb.checked);
+      });
+    });
+
+    // Link dot clicks
+    document.querySelectorAll('#sjb-tables .sjb-dot').forEach(dot => {
+      dot.addEventListener('click', e => {
+        e.stopPropagation();
+        const row = dot.closest('.sjb-col-row');
+        const tid = row.dataset.tableId;
+        const col = row.dataset.col;
+
+        if (!pending) {
+          pending = { tableId: tid, col };
+          highlightPendingRow(row, true);
+          statusEl.innerHTML = `<div class="status-bar info">Click a column dot in another table to create a join — click same dot again to cancel</div>`;
+        } else if (pending.tableId === tid && pending.col === col) {
+          clearPending();
+        } else if (pending.tableId === tid) {
+          // Same table, different column — cancel + start new
+          clearPending();
+          pending = { tableId: tid, col };
+          highlightPendingRow(row, true);
+          statusEl.innerHTML = `<div class="status-bar info">Click a column dot in another table to create a join — click same dot again to cancel</div>`;
+        } else {
+          // Complete join
+          const dup = joins.find(j =>
+            (j.fromTableId === pending.tableId && j.fromCol === pending.col && j.toTableId === tid && j.toCol === col) ||
+            (j.fromTableId === tid && j.fromCol === col && j.toTableId === pending.tableId && j.toCol === pending.col)
+          );
+          if (!dup) {
+            const type = document.getElementById('sjb-default-join').value;
+            joins.push({ id: 'j' + (joinIdCtr++), fromTableId: pending.tableId, fromCol: pending.col, toTableId: tid, toCol: col, type });
+            renderJoinsList();
+            redrawLines();
+          }
+          clearPending();
+          statusEl.innerHTML = '';
+        }
+      });
+
+      // Hover hint when in pending state
+      dot.addEventListener('mouseenter', () => {
+        if (pending && dot.closest('.sjb-col-row').dataset.tableId !== pending.tableId) {
+          dot.style.background = '#10b981';
+          dot.style.transform = 'scale(1.4)';
+        }
+      });
+      dot.addEventListener('mouseleave', () => {
+        const row = dot.closest('.sjb-col-row');
+        const isSource = pending && pending.tableId === row.dataset.tableId && pending.col === row.dataset.col;
+        dot.style.background = isSource ? 'var(--accent)' : 'var(--border)';
+        dot.style.transform = isSource ? 'scale(1.3)' : '';
+      });
+    });
+  }
+
+  function highlightPendingRow(row, on) {
+    row.style.background = on ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : '';
+    row.style.borderColor = on ? 'var(--accent)' : 'transparent';
+    const dot = row.querySelector('.sjb-dot');
+    if (dot) { dot.style.background = on ? 'var(--accent)' : 'var(--border)'; dot.style.transform = on ? 'scale(1.3)' : ''; }
+  }
+
+  function clearPending() {
+    if (pending) {
+      const row = getColRow(pending.tableId, pending.col);
+      if (row) highlightPendingRow(row, false);
+    }
+    pending = null;
+    statusEl.innerHTML = '';
+  }
+
+  function getColRow(tableId, col) {
+    for (const row of document.querySelectorAll('#sjb-tables .sjb-col-row')) {
+      if (row.dataset.tableId === tableId && row.dataset.col === col) return row;
+    }
+    return null;
+  }
+
+  // ── Joins list ────────────────────────────────────────────────────────────
+
+  function renderJoinsList() {
+    if (!joins.length) { joinsCardEl.style.display = 'none'; return; }
+    joinsCardEl.style.display = '';
+    joinsListEl.innerHTML = joins.map(j => {
+      const ft = tables.find(t => t.id === j.fromTableId);
+      const tt = tables.find(t => t.id === j.toTableId);
+      return `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+          <select class="sjb-join-type" data-jid="${j.id}" style="font-size:12px;padding:2px 6px">
+            <option value="INNER"${j.type==='INNER'?' selected':''}>INNER</option>
+            <option value="LEFT"${j.type==='LEFT'?' selected':''}>LEFT</option>
+            <option value="RIGHT"${j.type==='RIGHT'?' selected':''}>RIGHT</option>
+            <option value="FULL"${j.type==='FULL'?' selected':''}>FULL OUTER</option>
+          </select>
+          <span style="font-family:var(--mono);font-size:12px;flex:1">
+            <b style="color:var(--accent)">${escapeHtml(ft?.tableName||'')}</b>.[${escapeHtml(j.fromCol)}]
+            &nbsp;=&nbsp;
+            <b style="color:var(--accent)">${escapeHtml(tt?.tableName||'')}</b>.[${escapeHtml(j.toCol)}]
+          </span>
+          <button class="btn btn-ghost btn-sm sjb-rm-join" data-jid="${j.id}" style="padding:1px 7px;font-size:12px">✕</button>
+        </div>`;
+    }).join('');
+
+    joinsListEl.querySelectorAll('.sjb-join-type').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const j = joins.find(j => j.id === sel.dataset.jid);
+        if (j) { j.type = sel.value; redrawLines(); }
+      });
+    });
+    joinsListEl.querySelectorAll('.sjb-rm-join').forEach(btn => {
+      btn.addEventListener('click', () => {
+        joins = joins.filter(j => j.id !== btn.dataset.jid);
+        renderJoinsList();
+        redrawLines();
+      });
+    });
+  }
+
+  // ── SVG lines ─────────────────────────────────────────────────────────────
+
+  function redrawLines() {
+    svgEl.innerHTML = '';
+    const tablesH = tablesEl.getBoundingClientRect().height;
+    const h = Math.max(tablesH + 24, 200);
+    canvasEl.style.minHeight = h + 'px';
+    svgEl.setAttribute('height', h);
+
+    const LINE_COLORS = ['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444'];
+    const canvasRect = canvasEl.getBoundingClientRect();
+
+    joins.forEach((join, i) => {
+      const fromRow = getColRow(join.fromTableId, join.fromCol);
+      const toRow   = getColRow(join.toTableId, join.toCol);
+      if (!fromRow || !toRow) return;
+
+      const fromDot = fromRow.querySelector('.sjb-dot');
+      const toDot   = toRow.querySelector('.sjb-dot');
+      if (!fromDot || !toDot) return;
+
+      const fr = fromDot.getBoundingClientRect();
+      const tr = toDot.getBoundingClientRect();
+      const cx = canvasRect.left;
+      const cy = canvasRect.top;
+
+      const x1 = fr.left + fr.width / 2 - cx;
+      const y1 = fr.top  + fr.height / 2 - cy;
+      const x2 = tr.left + tr.width / 2 - cx;
+      const y2 = tr.top  + tr.height / 2 - cy;
+
+      const color = LINE_COLORS[i % LINE_COLORS.length];
+      const cpx = Math.abs(x2 - x1) * 0.55;
+      const dash = join.type !== 'INNER' ? '6,3' : 'none';
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${x1} ${y1} C ${x1 + cpx} ${y1}, ${x2 - cpx} ${y2}, ${x2} ${y2}`);
+      path.setAttribute('stroke', color);
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke-dasharray', dash);
+      path.setAttribute('opacity', '0.85');
+      svgEl.appendChild(path);
+
+      // Endpoint dots
+      [[x1, y1], [x2, y2]].forEach(([ex, ey]) => {
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', ex); c.setAttribute('cy', ey); c.setAttribute('r', '4');
+        c.setAttribute('fill', color);
+        svgEl.appendChild(c);
+      });
+
+      // Label at midpoint
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const label = join.type === 'FULL' ? 'FULL' : join.type;
+      const lw = label.length * 6 + 8;
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bg.setAttribute('x', mx - lw / 2); bg.setAttribute('y', my - 9);
+      bg.setAttribute('width', lw); bg.setAttribute('height', 16);
+      bg.setAttribute('rx', '4'); bg.setAttribute('fill', color); bg.setAttribute('opacity', '0.95');
+      svgEl.appendChild(bg);
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.setAttribute('x', mx); txt.setAttribute('y', my + 2);
+      txt.setAttribute('text-anchor', 'middle'); txt.setAttribute('dominant-baseline', 'middle');
+      txt.setAttribute('font-size', '9'); txt.setAttribute('font-family', 'monospace');
+      txt.setAttribute('fill', 'white'); txt.textContent = label;
+      svgEl.appendChild(txt);
+    });
+  }
+
+  // ── SQL generation ────────────────────────────────────────────────────────
+
+  function generateSQL() {
+    if (!tables.length) return '';
+    const main = tables[0];
+    const mainAlias = main.alias;
+
+    // SELECT columns
+    const selCols = [];
+    tables.forEach(t => {
+      t.columns.filter(c => c.selected).forEach(c => {
+        selCols.push(`    ${t.alias}.[${c.name}]`);
+      });
+    });
+    if (!selCols.length) return '-- No columns selected';
+
+    let sql = `SELECT TOP (1000)\n${selCols.join(',\n')}\nFROM ${main.fullPath} ${mainAlias}\n`;
+
+    // Add JOINs — chain from already-added tables
+    const added = new Set([main.id]);
+    const queue = [...joins];
+    let pass = 0;
+    while (queue.length && pass < joins.length * 2) {
+      const j = queue.shift();
+      const fromAdded = added.has(j.fromTableId);
+      const toAdded   = added.has(j.toTableId);
+      if (!fromAdded && !toAdded) { queue.push(j); pass++; continue; }
+      if (fromAdded && toAdded)   continue; // already connected
+
+      const [anchorId, newId, anchorCol, newCol] = fromAdded
+        ? [j.fromTableId, j.toTableId, j.fromCol, j.toCol]
+        : [j.toTableId, j.fromTableId, j.toCol, j.fromCol];
+
+      const anchorT = tables.find(t => t.id === anchorId);
+      const newT    = tables.find(t => t.id === newId);
+      if (!newT) continue;
+
+      const kw = j.type === 'FULL' ? 'FULL OUTER JOIN' : `${j.type} JOIN`;
+      sql += `${kw} ${newT.fullPath} ${newT.alias}\n    ON ${anchorT.alias}.[${anchorCol}] = ${newT.alias}.[${newCol}]\n`;
+      added.add(newId);
+      pass = 0;
+    }
+
+    const firstCol = main.columns[0]?.name || 'id';
+    sql += `ORDER BY ${mainAlias}.[${firstCol}];`;
+    return sql;
+  }
+
+  // ── Button wiring ─────────────────────────────────────────────────────────
+
+  document.getElementById('sjb-parse').addEventListener('click', () => {
+    const input = document.getElementById('sjb-input').value;
+    const queries = splitQueries(input);
+    if (!queries.length) {
+      statusEl.innerHTML = '<div class="status-bar error">No SELECT statements found</div>';
+      return;
+    }
+
+    const usedAliases = new Set();
+    const parsed = [];
+    queries.forEach((q, i) => {
+      const r = parseSqlSelect(q);
+      if (!r) return;
+      if (!r.alias) r.alias = generateAlias(r.tableName, usedAliases);
+      usedAliases.add(r.alias);
+      parsed.push({ id: 't' + i, ...r, columns: r.columns.map(name => ({ name, selected: true })) });
+    });
+
+    if (!parsed.length) {
+      statusEl.innerHTML = '<div class="status-bar error">Could not parse any tables — check your SQL format</div>';
+      return;
+    }
+
+    tables  = parsed;
+    joins   = [];
+    pending = null;
+
+    editorEl.style.display = '';
+    joinsCardEl.style.display = 'none';
+    outputCardEl.style.display = 'none';
+    statusEl.innerHTML = `<div class="status-bar success">✓ Parsed ${tables.length} table${tables.length > 1 ? 's' : ''}</div>`;
+    renderTables();
+  });
+
+  document.getElementById('sjb-clear-input').addEventListener('click', () => {
+    document.getElementById('sjb-input').value = '';
+    editorEl.style.display = 'none';
+    statusEl.innerHTML = '';
+    tables = []; joins = []; pending = null;
+  });
+
+  document.getElementById('sjb-clear-joins').addEventListener('click', () => {
+    joins = []; pending = null;
+    renderJoinsList();
+    redrawLines();
+    outputCardEl.style.display = 'none';
+    statusEl.innerHTML = '';
+  });
+
+  document.getElementById('sjb-generate').addEventListener('click', () => {
+    const sql = generateSQL();
+    outputEl.value = sql;
+    outputCardEl.style.display = '';
+    outputEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  document.getElementById('sjb-copy').addEventListener('click', () => {
+    if (outputEl.value) copyToClipboard(outputEl.value);
+  });
+
+  window.addEventListener('resize', () => {
+    if (editorEl.style.display !== 'none') redrawLines();
   });
 }
