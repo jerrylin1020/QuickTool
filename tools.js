@@ -272,17 +272,7 @@ const TOOLS = [
     render: renderSqlJoinBuilder,
     init: initSqlJoinBuilder,
   },
-  {
-    id: 'jira-ticket-generator',
-    name: 'Jira Ticket Generator',
-    icon: '🎫',
-    category: 'Generator',
-    desc: 'Generate structured Jira tickets from descriptions using AI',
-    render: renderJiraTicketGenerator,
-    init: initJiraTicketGenerator,
-  },
 ];
-
 // =====================
 // App State
 // =====================
@@ -3910,25 +3900,3 @@ GO`;
     cancelConnect();
   });
 }
-
-// =====================
-// 30. Jira Ticket Generator
-// =====================
-function renderJiraTicketGenerator() {
-  return `
-    <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border)">
-      <iframe
-        src="https://claude.site/public/artifacts/4b320919-22e8-4e0f-af6b-14fc7ac6c087/embed"
-        title="Jira Ticket Generator"
-        width="100%"
-        height="720"
-        frameborder="0"
-        allow="clipboard-write"
-        allowfullscreen
-        style="display:block"
-      ></iframe>
-    </div>
-  `;
-}
-
-function initJiraTicketGenerator() {}
